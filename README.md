@@ -2,8 +2,8 @@
 
 Flutter application targeting Android and iOS. The initial foundation includes
 Riverpod dependency composition, centralized routing, Material themes, public
-build configuration, and a Dio client. Authentication and business features are
-not implemented.
+build configuration, and a Dio client. The authentication data/session layer is implemented; authentication UI,
+session-aware routing, and business features are not implemented.
 
 ## Development
 
@@ -58,10 +58,9 @@ uses the starter debug key and must be addressed before distribution.
 - `lib/shared/widgets/`: reusable presentation components.
 - `test/`: startup/navigation, configuration, and isolated client tests.
 
-Storage, error mapping, diagnostics, validators, formatting, and feature modules
-will be added when their functionality is implemented. No empty feature folders
-are created. Authentication headers, refresh behavior, and backend endpoints are
-intentionally deferred.
+Authentication storage, models, services, repository, session state, and
+providers live in `lib/features/auth/` and `lib/core/storage/`. Other feature
+modules will be added as their functionality is implemented.
 
 ## Validation
 
@@ -72,3 +71,91 @@ flutter build apk --debug
 ```
 
 API tests use an in-memory adapter and never contact a backend.
+
+
+## Authentication data and session layer
+
+The backend contract was inspected directly in `src/modules/auth/` and
+`tests/integration/auth.test.js` of the backend repository. The API base URL must
+include `/api/v1/`; services call relative paths such as `auth/login`.
+
+| Endpoint | Mobile request | Success `data` |
+| --- | --- | --- |
+| POST `auth/login` | `email`, `password`, `client: mobile` | `user`, `gymAccess`, `accessToken`, `refreshToken`, `expiresIn`, `tokenType` |
+| POST `auth/refresh` | `refreshToken` | `accessToken`, `refreshToken`, `expiresIn`, `tokenType` |
+| GET `auth/me` | Bearer access token | `user`, `gymAccess` |
+| POST `auth/logout` | `refreshToken` | `loggedOut: true` |
+
+Success envelopes are `{success: true, data, meta: {requestId}}`. Errors use
+`{success: false, error: {code, message}, meta: {requestId}}`. The server does not
+return refresh expiry or session IDs in these mobile JSON responses. Mobile
+requests send no Origin/cookie credentials; browser refresh cookies are a
+separate backend transport and are not implemented here. Password whitespace is
+preserved. An account can have no gym access or multiple grants with different
+roles; there is no account-wide role inferred by the client.
+
+`authApiServiceProvider` uses the existing public `apiClientProvider` for auth
+endpoints. Future protected feature services must use
+`authenticatedApiClientProvider`. Each service should convert Dio errors into
+safe typed failures before exposing them to controllers. Neither client logs
+credentials. Auth and protected requests disable automatic HTTP redirects,
+including per-request attempts to enable them on the protected client. Redirect
+responses are returned as failures; the client does not forward bearer tokens.
+
+`sessionControllerProvider` is a manual Riverpod Notifier. It starts in
+`SessionInitial` and does not restore automatically. Its methods are
+`restoreSession`, `login`, `logout`, and `refreshSession`. State explicitly
+represents loading/restoring, unauthenticated, authenticated identity, and a safe
+error. Access/refresh credentials are never included in controller state.
+Existing startup, login placeholders, and router behavior are unchanged.
+
+Only the refresh credential is persisted securely. Keys are scoped to both the
+environment and normalized API URL. Access tokens remain in memory. Restoration
+rotates the stored credential and retrieves `/auth/me`. Session operations and
+storage writes are serialized. Rotated credentials are staged privately: the
+refresh credential is persisted and `/auth/me` succeeds before the access token
+and authenticated identity become usable. Concurrent refresh callers share one future and
+one refresh API call. A protected `401 INVALID_AUTHENTICATION` refreshes and
+retries at most once; old-token 401s join pending recovery, and a late 401 after
+successful recovery reuses the new token.
+Login/refresh never receive a stale bearer token. Non-replayable stream or
+multipart bodies require an explicit retry by the future feature service.
+
+All refresh failures clear local credentials and access state, including network
+failures: retrying an ambiguously consumed refresh credential could trigger the
+backend's replay revocation. Logout blocks bearer use immediately, waits for any
+ongoing rotation, revokes the latest refresh credential, and clears local storage
+even if backend revocation fails. A storage-clear failure is surfaced as a
+storage error and blocks restoration of the untrusted credential in that
+repository instance. Successful cleanup is required before session recovery.
+If the operating system refuses deletion, the app cannot guarantee physical
+removal; the error must be surfaced to the user by the future UI. In-flight
+requests already sent are not recalled by local logout.
+
+Repository disposal discards in-memory credentials and prevents new API/storage
+side effects or state publication by obsolete operations. Operations already
+sent to the backend or native secure storage cannot be recalled. A
+Riverpod-container-owned operation queue survives repository replacement,
+draining those operations before the replacement can mutate credentials. A
+discarded backend rotation may require a fresh login. Independently constructed
+repositories sharing storage must also share an `AuthOperationQueue`; do not
+create competing session authorities or invalidate the queue independently.
+
+### Android emulator development
+
+```sh
+flutter run --dart-define=APP_ENV=development --dart-define=API_BASE_URL=http://10.0.2.2:8001/api/v1/
+```
+
+The Android emulator's `10.0.2.2` alias reaches the host machine. This URL is a
+development command only, never a source-code default. Debug networking allows
+cleartext only to this emulator alias. Other hosts and release builds retain
+HTTPS defaults; physical-device and iOS connectivity must be configured
+separately. Production and staging AppConfig validation still requires HTTPS.
+
+Android Internet permission is included in the main manifest. Backup and device
+transfer rules exclude the secure-storage credential/key files. iOS uses
+this-device-only, unlocked Keychain storage and a Keychain access-group
+entitlement for this app. Real-device secure-storage behavior and backend
+connectivity are separate integration checks; unit tests use fakes and an
+in-memory HTTP adapter, with generated non-production credentials.
