@@ -2,8 +2,9 @@
 
 Flutter application targeting Android and iOS. The initial foundation includes
 Riverpod dependency composition, centralized routing, Material themes, public
-build configuration, and a Dio client. The authentication data/session layer is implemented; authentication UI,
-session-aware routing, and business features are not implemented.
+build configuration, and a Dio client. Authentication includes login, secure
+session restoration, auth-aware navigation, and logout. Business features are
+not implemented; authenticated home remains a placeholder.
 
 ## Development
 
@@ -15,10 +16,10 @@ flutter run
 ```
 
 The default debug configuration is development, without a backend URL. Startup
-opens `/startup`; Continue opens the `/login` placeholder. `/home` is a temporary
-navigation preview, available only in non-release development builds. It does
-not authenticate a user. Other environments and release builds redirect `/home`
-to `/login`.
+opens `/startup` while the existing session controller restores the scoped
+credential. No credential or failed recovery opens `/login`; successful recovery
+opens authenticated `/home` in every environment. Login and logout update the
+session state, and the router reacts without manual navigation from widgets.
 
 ## Build configuration
 
@@ -41,8 +42,9 @@ flutter run --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://sta
 flutter build apk --release --dart-define=APP_ENV=production --dart-define=API_BASE_URL=https://api.example.test/api/v1/
 ```
 
-The URLs above are examples, not deployed services. The app currently makes no
-API requests. Invalid configuration fails at startup with a descriptive
+The URLs above are examples, not deployed services. Restoration calls refresh
+and `/auth/me` only when a scoped credential exists; login/logout use the
+configured API. Invalid configuration fails at startup with a descriptive
 `FormatException`. Dart defines are compiled into the app: never put secrets,
 passwords, private API keys, or JWT signing secrets in them.
 
@@ -52,7 +54,7 @@ uses the starter debug key and must be addressed before distribution.
 
 ## Structure
 
-- `lib/app/`: bootstrap, app composition, router, theme, placeholder navigation.
+- `lib/app/`: bootstrap, app composition, auth-aware router, theme, navigation.
 - `lib/core/config/`: validated environment configuration and its provider.
 - `lib/core/network/`: shared Dio client and lifecycle-managed provider.
 - `lib/shared/widgets/`: reusable presentation components.
@@ -70,7 +72,8 @@ flutter test
 flutter build apk --debug
 ```
 
-API tests use an in-memory adapter and never contact a backend.
+API and widget tests use fake dependencies or local test servers, never a live
+backend or real credentials.
 
 
 ## Authentication data and session layer
@@ -103,11 +106,23 @@ including per-request attempts to enable them on the protected client. Redirect
 responses are returned as failures; the client does not forward bearer tokens.
 
 `sessionControllerProvider` is a manual Riverpod Notifier. It starts in
-`SessionInitial` and does not restore automatically. Its methods are
+`SessionInitial`; `GymApp` requests restoration once for each initial session
+controller lifecycle, after widget/provider initialization. Its methods are
 `restoreSession`, `login`, `logout`, and `refreshSession`. State explicitly
 represents loading/restoring, unauthenticated, authenticated identity, and a safe
 error. Access/refresh credentials are never included in controller state.
-Existing startup, login placeholders, and router behavior are unchanged.
+GoRouter subscribes to session changes through a disposed-with-router notifier,
+keeping the same router instance. Initial/restoring/refreshing states show
+`/startup`; login loading keeps the form disabled; authenticated login/startup
+routes redirect to `/home`. Logout has an explicit loading operation, blocks
+repeat calls, and stays on the home placeholder until cleanup finishes, then
+routes to login. Repository bearer blocking still happens immediately. Safe
+errors are displayed on login, including failed restoration or logout cleanup.
+Unknown routes retain a recoverable not-found page once restoration finishes.
+
+The login page validates email/password, trims only email, offers labelled
+password visibility controls, and never navigates manually or accesses storage.
+The home placeholder uses existing session identity and makes no extra API call.
 
 Only the refresh credential is persisted securely. Keys are scoped to both the
 environment and normalized API URL. Access tokens remain in memory. Restoration

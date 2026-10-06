@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/features/auth/data/auth_failure.dart';
@@ -83,6 +85,37 @@ void main() {
       );
       expect(container.read(sessionControllerProvider), isA<SessionError>());
       expect(container.read(authRepositoryProvider).accessToken, isNull);
+    },
+  );
+  test(
+    'repository replacement during logout cannot publish obsolete state',
+    () async {
+      final controller = container.read(sessionControllerProvider.notifier);
+      await controller.login(
+        email: 'person@example.invalid',
+        password: syntheticCredential(),
+      );
+      api.logoutGate = Completer<void>();
+      final logout = controller.logout();
+      final failed = expectLater(logout, throwsA(isA<AuthFailure>()));
+      await Future<void>.delayed(Duration.zero);
+      container.invalidate(authRepositoryProvider);
+      expect(container.read(sessionControllerProvider), isA<SessionInitial>());
+      final login = container
+          .read(sessionControllerProvider.notifier)
+          .login(
+            email: 'person@example.invalid',
+            password: syntheticCredential(),
+          );
+      api.logoutGate!.complete();
+      await failed;
+      await login;
+      expect(
+        container.read(sessionControllerProvider),
+        isA<SessionAuthenticated>(),
+      );
+      expect(storage.value == api.loginTokens.refreshToken, isTrue);
+      expect(storage.clears, 2);
     },
   );
 }

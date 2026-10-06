@@ -9,7 +9,7 @@ class SessionInitial extends SessionState {
   const SessionInitial();
 }
 
-enum SessionOperation { restoring, login, refreshing }
+enum SessionOperation { restoring, login, refreshing, loggingOut }
 
 class SessionLoading extends SessionState {
   const SessionLoading(this.operation);

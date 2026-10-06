@@ -1,68 +1,82 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/auth/data/auth_failure.dart';
+import '../../features/auth/models/session_state.dart';
+import '../../features/auth/providers/session_controller.dart';
 import '../../shared/widgets/message_page.dart';
-import '../router/app_routes.dart';
 
 class StartupScreen extends StatelessWidget {
-  const StartupScreen({super.key, required this.showDevelopmentHome});
-
-  final bool showDevelopmentHome;
+  const StartupScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => const Scaffold(
+    body: SafeArea(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(semanticsLabel: 'Restoring session'),
+            SizedBox(height: 24),
+            Text('Gym Management'),
+            SizedBox(height: 8),
+            Text('Restoring your session…'),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Authenticated navigation placeholder. No gym features or extra API calls.
+class AuthenticatedHomeScreen extends ConsumerWidget {
+  const AuthenticatedHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionControllerProvider);
+    final loggingOut =
+        session is SessionLoading &&
+        session.operation == SessionOperation.loggingOut;
+    final user = session is SessionAuthenticated ? session.identity.user : null;
+    final displayName = user?.displayName?.trim();
+    final name = displayName != null && displayName.isNotEmpty
+        ? displayName
+        : user?.email;
     return MessagePage(
-      title: 'Welcome to Gym Management',
-      message:
-          'Manage your gym in one place. More functionality is coming soon.',
+      title: loggingOut ? 'Signing out…' : 'Welcome, ${name ?? ''}',
+      message: loggingOut
+          ? 'Ending your session securely.'
+          : 'You are signed in.',
       actions: [
         FilledButton(
-          onPressed: () => context.go(AppRoutes.login),
-          child: const Text('Continue'),
-        ),
-        if (showDevelopmentHome)
-          OutlinedButton(
-            onPressed: () => context.go(AppRoutes.developmentHome),
-            child: const Text('Open development preview'),
-          ),
-      ],
-    );
-  }
-}
-
-class LoginPlaceholderScreen extends StatelessWidget {
-  const LoginPlaceholderScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MessagePage(
-      title: 'Sign-in coming soon',
-      message: 'Sign-in is not available yet.',
-      actions: [
-        TextButton(
-          onPressed: () => context.go(AppRoutes.startup),
-          child: const Text('Return to start'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Temporary navigation target; it does not establish an authenticated user.
-class DevelopmentHomeScreen extends StatelessWidget {
-  const DevelopmentHomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MessagePage(
-      title: 'Development preview',
-      message:
-          'This temporary home is for development only. '
-          'No user is signed in and no gym data is loaded.',
-      actions: [
-        TextButton(
-          onPressed: () => context.go(AppRoutes.startup),
-          child: const Text('Return to start'),
+          onPressed: user == null || loggingOut
+              ? null
+              : () async {
+                  try {
+                    await ref.read(sessionControllerProvider.notifier).logout();
+                  } on AuthFailure {
+                    // Cleanup failures are published as safe errors on the login page.
+                  }
+                },
+          child: loggingOut
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Theme.of(context).colorScheme.onSurface,
+                        semanticsLabel: 'Logging out',
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Logging out…'),
+                  ],
+                )
+              : const Text('Logout'),
         ),
       ],
     );

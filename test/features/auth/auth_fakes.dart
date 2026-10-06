@@ -92,13 +92,16 @@ class FakeCredentialStorage implements CredentialStorage {
 class FakeAuthApi implements AuthApiService {
   final loginTokens = syntheticTokens();
   final rotatedTokens = syntheticTokens();
-  final identity = syntheticIdentity();
+  AuthIdentity identity = syntheticIdentity();
   AuthFailure? loginFailure;
   AuthFailure? refreshFailure;
   AuthFailure? logoutFailure;
   AuthFailure? meFailure;
   Completer<void>? refreshGate;
   Completer<void>? loginGate;
+  Completer<void>? logoutGate;
+  String? submittedEmail;
+  String? submittedPassword;
   Completer<void>? meGate;
   final loginEntered = Completer<void>();
   final meEntered = Completer<void>();
@@ -113,6 +116,8 @@ class FakeAuthApi implements AuthApiService {
     required String password,
   }) async {
     loginCalls++;
+    submittedEmail = email;
+    submittedPassword = password;
     if (!loginEntered.isCompleted) loginEntered.complete();
     if (loginGate != null) await loginGate!.future;
     if (loginFailure != null) throw loginFailure!;
@@ -140,6 +145,7 @@ class FakeAuthApi implements AuthApiService {
   @override
   Future<void> logout(String refreshCredential) async {
     loggedOutCredentials.add(refreshCredential);
+    if (logoutGate != null) await logoutGate!.future;
     if (logoutFailure != null) throw logoutFailure!;
   }
 }
