@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/admin_dashboard/presentation/dashboard_page.dart';
+import '../../features/members/presentation/members_page.dart';
+import '../../features/members/presentation/member_details_page.dart';
+import '../../features/members/presentation/member_form_page.dart';
 import '../../features/auth/models/auth_models.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -32,11 +35,17 @@ GoRouter createAppRouter({
                 grant.status == AccountStatus.active,
           );
       final adminPath = path.startsWith('${AppRoutes.home}/');
+      final memberRoute =
+          path == AppRoutes.members || path.startsWith('${AppRoutes.members}/');
       if (current is SessionInitial ||
           current is SessionLoading &&
-              (current.operation == SessionOperation.restoring ||
-                  current.operation == SessionOperation.refreshing)) {
+              current.operation == SessionOperation.restoring) {
         target = AppRoutes.startup;
+      } else if (current is SessionLoading &&
+          current.operation == SessionOperation.refreshing) {
+        // Retain member forms/read scopes during interceptor recovery. AdminShell
+        // hides the protected subtree and shows startup until recovery finishes.
+        target = memberRoute ? null : AppRoutes.startup;
       } else if (current is SessionLoading &&
           current.operation == SessionOperation.loggingOut) {
         target = AppRoutes.home;
@@ -78,7 +87,30 @@ GoRouter createAppRouter({
           ),
           GoRoute(
             path: AppRoutes.members,
-            builder: (_, _) => const AdminComingSoonPage(title: 'Members'),
+            builder: (_, _) => const MembersPageView(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (_, state) =>
+                    MemberFormPage(gymId: state.uri.queryParameters['gymId']),
+              ),
+              GoRoute(
+                path: ':memberId',
+                builder: (_, state) => MemberDetailsPage(
+                  memberId: state.pathParameters['memberId']!,
+                  gymId: state.uri.queryParameters['gymId'],
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (_, state) => MemberFormPage(
+                      memberId: state.pathParameters['memberId']!,
+                      gymId: state.uri.queryParameters['gymId'],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           GoRoute(
             path: AppRoutes.trainers,

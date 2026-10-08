@@ -6,6 +6,7 @@ import '../../features/admin_dashboard/providers/dashboard_providers.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/providers/session_controller.dart';
 import '../router/app_routes.dart';
+import 'foundation_screens.dart';
 
 class AdminShell extends ConsumerWidget {
   const AdminShell({super.key, required this.location, required this.child});
@@ -23,14 +24,18 @@ class AdminShell extends ConsumerWidget {
     final gyms = ref.watch(adminGymIdsProvider);
     final selected = ref.watch(adminGymProvider);
     // Do not render protected content during the router's asynchronous refresh.
-    if (session is! SessionAuthenticated || selected == null) {
+    final refreshing =
+        session is SessionLoading &&
+        session.operation == SessionOperation.refreshing;
+    if (session is! SessionAuthenticated && !refreshing || selected == null) {
       return const SizedBox.shrink();
     }
-    final index = destinations.indexOf(location);
-    return PopScope(
-      canPop: index <= 0,
+    final memberDetail = location.startsWith('${AppRoutes.members}/');
+    final index = memberDetail ? 1 : destinations.indexOf(location);
+    final shell = PopScope(
+      canPop: memberDetail || index <= 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) context.go(AppRoutes.dashboard);
+        if (!didPop && !memberDetail) context.go(AppRoutes.dashboard);
       },
       child: Scaffold(
         appBar: AppBar(
@@ -99,6 +104,15 @@ class AdminShell extends ConsumerWidget {
           ],
         ),
       ),
+    );
+    return Stack(
+      children: [
+        Offstage(
+          offstage: refreshing,
+          child: TickerMode(enabled: !refreshing, child: shell),
+        ),
+        if (refreshing) const StartupScreen(),
+      ],
     );
   }
 }

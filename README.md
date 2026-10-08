@@ -215,3 +215,65 @@ refresh and pull-to-refresh. Tests cover contract parsing, request dates, failur
 interceptor recovery, provider races/state transitions, exact money formatting,
 admin navigation/logout, responsive layout, and session recovery failure. Backend
 business logic, dependencies, and native configuration are unchanged by M27.
+
+## M28: Admin member management
+
+Members is now a functional admin section with server search/status filtering,
+bounded page navigation (20 per page; API maximum 100 per page and 10,000 pages),
+loading/empty/error/retry states and pull-to-refresh. The selected authorized admin
+gym is reused from M27; no user-supplied tenant input is offered. Member child
+routes retain the opening gym ID as context and require it to match the current
+session-derived selection. Switching gym while reading/editing requires returning
+to Members, rather than reusing an old member ID under the new gym.
+
+The `features/members` module contains typed profile, summary, membership,
+pagination and draft models, a repository on the existing authenticated Dio,
+Riverpod query/read/mutation providers and presentation widgets. Replacement
+query/gym results are ordered by Riverpod; detail providers include account/gym
+scope and are disposed when unused. Saves block duplicates and discard UI results
+after scope loss. Successful writes invalidate the server list/dashboard/summary,
+without inventing local records. Member routes retain their widget subtree offstage
+behind startup during access-token recovery, preventing a refresh from discarding
+an in-progress form. Restoration, logout and failed-refresh redirects are unchanged.
+
+Existing production endpoints consumed (all under `/api/v1/gyms/:gymId`):
+
+- `GET /members`: `page`, `limit`, optional `search`/`status`; `data` is the
+  member DTO array, `meta.pagination` is `{ page, limit, total }`.
+- `GET /members/:memberId`: member DTO for editing.
+- `POST /member-onboarding`: standalone active member; no account, subscription,
+  payment or trainer assignment. Request includes code/name/phone and optional
+  date of birth, gender, address and emergency contact only.
+- `PATCH /members/:memberId`: mutable name/phone/profile/status fields only.
+  Code, tenant, user linkage and branch assignment are omitted; optional profile
+  fields may be cleared using the backend's nullable PATCH contract.
+- `GET /members/:memberId/summary`: Member 360 profile/current branch/trainers,
+  current subscription, bounded history, successful payments/current balance and
+  attendance. It supplies the details page without redundant profile requests.
+- `GET /members/:memberId/memberships`: paginated history and current membership,
+  with plan snapshots and successful paid/balance totals per subscription.
+- `GET /members/:memberId/memberships/:subscriptionId`: opened on demand for
+  read-only membership inspection, including cancellation time/reason where present.
+
+All endpoints use `{ success, data, meta }`. The UI preserves backend-derived
+membership status/current flags and exclusive end dates; it does not recalculate
+eligibility, payment balances, authorization or timezone rules. Money reuses M27's
+exact integer INR formatter. Only allowlisted safe failures reach presentation;
+server validation is generic because the backend does not return field-level
+validation details. Duplicate member codes receive specific safe feedback.
+
+Branch selection remains unavailable. Onboarding omits `branchId`; PATCH also
+omits it to preserve existing assignments. List rows show the branch ID when
+provided; Member 360 supplies the current branch name. No branch list is inferred
+from these records, and no development/bootstrap endpoint is used. No membership
+purchase, renewal, cancellation, payment, attendance or trainer mutation UI is
+implemented in M28.
+
+Live verification uses the existing emulator command above with the real backend
+on port 8001 and an authorized admin session. Check list/search/filter/pages,
+onboarding, profile editing, summary/history and logout; test branch-assigned
+records created through existing trusted tooling without adding app credentials.
+Automated tests use synthetic records and in-memory HTTP adapters. Network writes
+already sent cannot be recalled when navigating or logging out; after an ambiguous
+network save failure, check Members before retrying. A retried onboarding code is
+still protected by the backend's uniqueness constraint.
