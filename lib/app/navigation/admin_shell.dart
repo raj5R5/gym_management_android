@@ -34,7 +34,12 @@ class AdminShell extends ConsumerWidget {
     final memberDetail = location.startsWith('${AppRoutes.members}/');
     final trainerDetail = location.startsWith('${AppRoutes.trainers}/');
     final planDetail = location.startsWith('${AppRoutes.plans}/');
-    final profileDetail = memberDetail || trainerDetail || planDetail;
+    final attendance =
+        location == AppRoutes.attendance ||
+        location.startsWith('${AppRoutes.attendance}/');
+    final attendanceDetail = location.startsWith('${AppRoutes.attendance}/');
+    final profileDetail =
+        attendanceDetail || memberDetail || trainerDetail || planDetail;
     final index = memberDetail
         ? 1
         : trainerDetail
@@ -43,7 +48,7 @@ class AdminShell extends ConsumerWidget {
         ? 3
         : destinations.indexOf(location);
     final shell = PopScope(
-      canPop: profileDetail || index <= 0,
+      canPop: profileDetail || index == 0,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && !profileDetail) context.go(AppRoutes.dashboard);
       },
@@ -51,6 +56,43 @@ class AdminShell extends ConsumerWidget {
         appBar: AppBar(
           title: const Text('Gym Management'),
           automaticallyImplyLeading: false,
+          leading: Builder(
+            builder: (context) => IconButton(
+              tooltip: 'Admin navigation',
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              icon: const Icon(Icons.menu),
+            ),
+          ),
+        ),
+        drawer: Drawer(
+          child: SafeArea(
+            child: ListView(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Admin navigation'),
+                ),
+                ...{
+                  'Dashboard': AppRoutes.dashboard,
+                  'Members': AppRoutes.members,
+                  'Trainers': AppRoutes.trainers,
+                  'Plans': AppRoutes.plans,
+                  'More': AppRoutes.more,
+                }.entries.map(
+                  (entry) => ListTile(
+                    title: Text(entry.key),
+                    selected:
+                        location == entry.value ||
+                        location.startsWith('${entry.value}/'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.go(entry.value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         body: SafeArea(
           child: Column(
@@ -94,29 +136,35 @@ class AdminShell extends ConsumerWidget {
             ],
           ),
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index < 0 ? 0 : index,
-          onDestinationSelected: (value) => context.go(destinations[value]),
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              label: 'Dashboard',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.people_outline),
-              label: 'Members',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.fitness_center),
-              label: 'Trainers',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.card_membership_outlined),
-              label: 'Plans',
-            ),
-            NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
-          ],
-        ),
+        bottomNavigationBar: attendance
+            ? null
+            : NavigationBar(
+                selectedIndex: index < 0 ? 0 : index,
+                onDestinationSelected: (value) =>
+                    context.go(destinations[value]),
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    label: 'Dashboard',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.people_outline),
+                    label: 'Members',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.fitness_center),
+                    label: 'Trainers',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.card_membership_outlined),
+                    label: 'Plans',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.more_horiz),
+                    label: 'More',
+                  ),
+                ],
+              ),
       ),
     );
     return Stack(

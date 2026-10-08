@@ -21,6 +21,8 @@ import '../../shared/widgets/message_page.dart';
 import '../navigation/admin_shell.dart';
 import '../navigation/foundation_screens.dart';
 import 'app_routes.dart';
+import '../../features/attendance/presentation/attendance_page.dart';
+import '../../features/attendance/presentation/check_in_page.dart';
 
 GoRouter createAppRouter({
   required SessionState Function() session,
@@ -43,6 +45,8 @@ GoRouter createAppRouter({
           );
       final adminPath = path.startsWith('${AppRoutes.home}/');
       final profileRoute =
+          path == AppRoutes.attendance ||
+          path.startsWith('${AppRoutes.attendance}/') ||
           path == AppRoutes.plans ||
           path.startsWith('${AppRoutes.plans}/') ||
           path == AppRoutes.members ||
@@ -190,6 +194,19 @@ GoRouter createAppRouter({
                 builder: (_, state) => PlanFormPage(
                   gymId: state.uri.queryParameters['gymId'],
                   planId: state.pathParameters['planId'],
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: AppRoutes.attendance,
+            builder: (_, _) => const AttendancePageView(),
+            routes: [
+              GoRoute(
+                path: 'check-in',
+                builder: (_, state) => CheckInPage(
+                  gymId: state.uri.queryParameters['gymId'],
+                  selectOnly: state.uri.queryParameters['mode'] == 'filter',
                 ),
               ),
             ],

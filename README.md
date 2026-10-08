@@ -476,3 +476,70 @@ Plan lifecycle is Active/Inactive through PATCH; no delete operation exists.
 Five Material navigation destinations are verified at 320px width with enlarged
 text. Live testing should cover direct Plans navigation, create/edit/status changes,
 empty-purchase creation/return, and existing Dashboard/Members/Trainers/More/logout.
+
+### M31: Admin attendance operations
+
+Attendance is temporarily parked pending biometric/device/automated attendance
+integration design. It has no Admin drawer entry, app-bar shortcut or bottom
+navigation entry. Dashboard, Members, Trainers, Plans and More remain available.
+The implementation and tests are retained, with no backend changes. Existing
+Dashboard/member attendance metrics remain unchanged. Parked routes are
+`/home/attendance` and `/home/attendance/check-in?gymId=...`. Back from the root
+returns to Dashboard; the member picker returns to Attendance. More/logout and
+existing auth restoration/refresh guards are retained.
+
+The typed attendance repository uses the existing authenticated Dio only:
+
+- `GET /api/v1/gyms/:gymId/attendance/today?page=...&limit=20`, optionally
+  `status=open|completed` and a trusted selected `memberId`. M19 returns
+  `{success, data: {date, timezone, summary, visits}, meta: {requestId, pagination}}`.
+  Summary fields are `totalVisits`, `completedVisits`, `currentlyCheckedIn` and
+  `uniqueMembers`, reflecting the server filters across all pages. Visit fields
+  are `id`, `memberId`, `memberCode`, `memberName`, `branchId`, `branchName`,
+  `subscriptionId`, `checkInAt`, `checkOutAt`, `status`, `durationMs`.
+- `GET /api/v1/gyms/:gymId/attendance?page=...&limit=20&status=open`. M16 returns
+  an array of full attendance DTOs and `meta.pagination: {page, limit, total}`.
+  It intentionally has **no date filter**, keeping older/overnight open visits
+  actionable: M19 today alone excludes them. Full DTOs contain `id`, `gymId`,
+  `memberId`, `branchId`, `subscriptionId`, `status`, `checkInAt`, `checkOutAt`,
+  `durationMs`, `recordedByUserId`, `createdAt` and `updatedAt`. Open member identity
+  reuses the existing scoped member profile provider because M16 has no names.
+- `POST /api/v1/gyms/:gymId/attendance/check-in`: exactly `{memberId, branchId}`;
+  201 with a full open attendance DTO. The controller freshly reads the selected
+  member using the existing member repository, verifies the session/gym is still
+  current, and takes the assigned branch from that trusted profile.
+- `POST /api/v1/gyms/:gymId/attendance/:attendanceId/check-out`: `{}`; 200 with
+  a full completed DTO. Timestamps, membership selection, eligibility, atomic
+  lifecycle changes and duration remain entirely server-owned.
+
+The screen shows all-date open visits, server-confirmed check-in/out results, and
+paginated today's visits (completed by default). Status and member filters apply
+to today's history only. Member selection/search reuses the existing member list
+contract for name/member code/phone, with explicit confirmation before a write.
+Both attendance lists have loading, empty, safe error/retry and refresh states.
+The server's `date` and IANA `timezone` define gym today; no client day boundaries
+are sent. Visit instants are displayed in the device timezone, explicitly labelled,
+and durations format the integer server `durationMs`, never timestamp subtraction.
+
+Branch selection remains deferred. Attendance reads show all branches. M19 supplies
+branch names; M16 open cards display only trusted branch IDs. Members without an
+assigned branch cannot check in through this UI, and receive an honest explanation.
+Inactive/mismatched branches and membership eligibility remain backend decisions.
+There is no branch list, bootstrap endpoint, arbitrary branch input or backend change.
+
+Scoped Riverpod providers/controller prevent duplicate writes and ignore stale
+results after gym/account changes. Writes are never retried by the controller or
+repository; the existing single 401 authentication recovery/replay is preserved.
+Transport/server failures or malformed write responses are uncertain and block
+further writes until an explicit successful recheck of both open visits and today's
+attendance. Failed rechecks keep the lock. Inspect relevant pages/filters before
+another action: a successful read is not proof of absence across every page.
+The local uncertainty lock lasts for the current app/session; after restart/sign-in
+always inspect attendance before repeating a previously uncertain operation.
+
+When Attendance is re-enabled, live verification is required with an authorized
+Admin against `http://10.0.2.2:8001/api/v1/`: open Attendance, search an assigned member with a
+valid subscription, confirm check-in, inspect the open visit, confirm checkout,
+inspect completed duration, refresh/filter/page, and verify conflicts, overnight
+visits, token refresh, back, existing destinations and logout. Automated tests use
+synthetic fixtures/adapters and do not write real backend attendance records.
