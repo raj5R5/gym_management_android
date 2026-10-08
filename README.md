@@ -114,7 +114,7 @@ error. Access/refresh credentials are never included in controller state.
 GoRouter subscribes to session changes through a disposed-with-router notifier,
 keeping the same router instance. Initial/restoring/refreshing states show
 `/startup`; login loading keeps the form disabled; authenticated login/startup
-routes redirect to `/home`. Logout has an explicit loading operation, blocks
+routes redirect to `/home/dashboard` for active admins, or `/home` otherwise. Logout has an explicit loading operation, blocks
 repeat calls, and stays on the home placeholder until cleanup finishes, then
 routes to login. Repository bearer blocking still happens immediately. Safe
 errors are displayed on login, including failed restoration or logout cleanup.
@@ -174,3 +174,44 @@ this-device-only, unlocked Keychain storage and a Keychain access-group
 entitlement for this app. Real-device secure-storage behavior and backend
 connectivity are separate integration checks; unit tests use fakes and an
 in-memory HTTP adapter, with generated non-production credentials.
+
+
+## M27: Admin shell and all-branch dashboard
+
+Active admin gym grants from the restored session determine the available gym
+context. `/home/dashboard`, `/home/members`, `/home/trainers`, and `/home/more`
+share an authenticated admin shell. Members and Trainers are explicitly marked
+as coming in later milestones. More provides the existing identity/logout flow.
+Multiple admin grants enable a gym selector restricted to those grants; the
+current identity contract supplies IDs rather than display names. Other roles
+retain the existing authenticated home until their own milestones.
+
+The `admin_dashboard` feature owns typed models, a read-only repository using
+`authenticatedApiClientProvider`, Riverpod query/context/async state, and
+presentation widgets. No second client, token store, or session authority is
+created. The existing interceptor handles 401 recovery. Dashboard failures have
+explicit retry rather than automatic Riverpod retries. Replaced filter/gym
+requests cannot overwrite the current provider result.
+
+The existing endpoint is `GET /api/v1/gyms/:gymId/dashboard`, with the
+`{ success, data, meta }` envelope. `data` contains `period`, `members`,
+`trainers`, `subscriptions`, `payments`, and `attendance`. M27 deliberately sends
+no `branchId` and shows **Whole gym · All branches**. Branch selection is deferred;
+no branch-list or development bootstrap endpoint is used. The repository/query
+boundary can accept future approved filters without changing presentation/API
+ownership.
+
+Date selections send inclusive `from` and `to` calendar dates as `YYYY-MM-DD`,
+with at most 366 days. The default omits both dates so the backend resolves gym-local
+today. The UI displays the returned period and timezone; it does not compute gym
+timezone boundaries, authorization, or aggregation rules. Profile/subscription
+counts are current snapshots; successful payments and completed visits use the
+selected period. Checked-in members are current. INR revenue formatting uses
+integer paise, integer division, and Indian digit grouping, without floating-point
+money arithmetic.
+
+The dashboard supports loading, safe errors, retry, zero-data messaging, manual
+refresh and pull-to-refresh. Tests cover contract parsing, request dates, failures,
+interceptor recovery, provider races/state transitions, exact money formatting,
+admin navigation/logout, responsive layout, and session recovery failure. Backend
+business logic, dependencies, and native configuration are unchanged by M27.

@@ -6,42 +6,43 @@ class MessagePage extends StatelessWidget {
     required this.title,
     required this.message,
     this.actions = const [],
+    this.embedded = false,
   });
 
+  final bool embedded;
   final String title;
   final String message;
   final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Gym Management')),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
+    final body = SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.headlineMedium),
+                const SizedBox(height: 16),
+                Text(message),
+                for (final action in actions) ...[
                   const SizedBox(height: 16),
-                  Text(message),
-                  for (final action in actions) ...[
-                    const SizedBox(height: 16),
-                    action,
-                  ],
+                  action,
                 ],
-              ),
+              ],
             ),
           ),
         ),
       ),
+    );
+    if (embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gym Management')),
+      body: body,
     );
   }
 }

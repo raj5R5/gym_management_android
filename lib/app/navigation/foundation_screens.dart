@@ -30,7 +30,8 @@ class StartupScreen extends StatelessWidget {
 
 /// Authenticated navigation placeholder. No gym features or extra API calls.
 class AuthenticatedHomeScreen extends ConsumerWidget {
-  const AuthenticatedHomeScreen({super.key});
+  const AuthenticatedHomeScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,12 +39,16 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
     final loggingOut =
         session is SessionLoading &&
         session.operation == SessionOperation.loggingOut;
+    if (session is! SessionAuthenticated && !loggingOut) {
+      return const SizedBox.shrink();
+    }
     final user = session is SessionAuthenticated ? session.identity.user : null;
     final displayName = user?.displayName?.trim();
     final name = displayName != null && displayName.isNotEmpty
         ? displayName
         : user?.email;
     return MessagePage(
+      embedded: embedded,
       title: loggingOut ? 'Signing out…' : 'Welcome, ${name ?? ''}',
       message: loggingOut
           ? 'Ending your session securely.'
