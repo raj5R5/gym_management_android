@@ -339,3 +339,140 @@ For live verification, run the existing development emulator command above again
 port 8001 with an authorized admin session; verify list/search/filter/pagination,
 create/edit/details/nullable clearing, refresh and logout. Automated tests use
 synthetic DTOs and in-memory adapters. No credentials are included in the app.
+
+## M30: Admin membership and payment operations
+
+From Member Details, open **Membership & payments** for current membership,
+20-record paginated history, server-provided paid/balance totals and successful
+payment history. Membership details include cancellation metadata and renewal
+association. Existing member models, M23 read providers, section cards, pagination
+and integer INR formatting are reused. The new `features/memberships` repository
+and scoped Riverpod providers use the existing authenticated Dio and interceptor.
+No dependencies, native configuration, auth core or backend files are changed.
+
+All endpoints below are under `/api/v1/gyms/:gymId` and return
+`{ success, data, meta }`. Collection pagination is `meta.pagination` with
+`{ page, limit, total }`:
+
+- `GET /membership-plans?page=...&limit=20&status=active`: plan array with
+  `id`, `gymId`, `name`, `durationDays`, integer-paise **`price`**, `status`,
+  optional `description`, and server timestamps. Plans are selected from this
+  paginated authenticated list. Admin plan management is available directly from Plans.
+- `GET /members/:memberId/memberships?page=...&limit=20` (M23):
+  `{ member, currentMembership, subscriptions }`, with plan snapshots,
+  backend-derived status/current flags and per-subscription `paymentSummary`
+  containing `totalSuccessfulPaidPaise` and `remainingBalancePaise`.
+- `GET /members/:memberId/memberships/:subscriptionId` (M23):
+  `{ subscription, paymentSummary }`, including cancellation time/reason and
+  predecessor relationship. Ownership is verified before renewal.
+- `GET /members/:memberId/summary` (existing M20): reused cached Member 360 for
+  identity and backend-derived overall successful payment count/total. Flutter
+  does not sum a paginated payment list to invent a total.
+- `POST /member-memberships` (M22, 201): `{ memberId, planId }`, optionally
+  `payment: { enabled: true, amountPaise, method, paidAt, reference? }`.
+  Response `data` is `{ subscription, payment: paymentDto | null }`. The form
+  omits `startDate`; the backend defaults it to UTC today and computes the end
+  date. Purchase review precedes explicit confirmation. A payment is recorded
+  atomically with the subscription, with `paidAt` captured at review time.
+- `GET /payments?page=...&limit=20&memberId=...&status=succeeded` (M14): payment
+  array with IDs/scope, `subscriptionId`, `amountPaise`, `status`, `paymentMethod`,
+  `paidAt`, optional `transactionReference`, `notes`, `recordedByUserId`, and
+  server timestamps. The UI shows amount, method, reference, UTC time and a link
+  to the associated membership. Recorder IDs are safely parsed but not displayed
+  as names because the contract does not expose recorder display information.
+- `POST /members/:memberId/memberships/:subscriptionId/cancel` (M23, 200):
+  `{ cancellationReason?: trimmedString }`, maximum 500 characters. Explicit
+  confirmation explains that history is preserved and no refund is created.
+  The response is the full subscription DTO; the server owns idempotency.
+- `POST /subscriptions/:subscriptionId/renew` (M15, 201): `{}` after a fresh
+  member-scoped M23 ownership read. Confirmation explains that current plan
+  terms, predecessor, dates and eligibility are server-resolved. The response
+  is the new subscription DTO. Renewal does not record a payment in this UI.
+
+Subscription DTOs retain `membershipPlanId`, `previousSubscriptionId`, dates,
+`status`, `isCurrentlyActive`, `planNameSnapshot`, `durationDaysSnapshot`,
+`pricePaiseSnapshot`, and optional cancellation fields. Dates remain UTC
+`[startDate, endDate)`; an active-status future record may be not-current. Flutter
+does not infer eligibility or recompute dates, balances, overlap or authorization.
+
+Manual methods are exactly `cash`, `upi`, `bank_transfer`, `card`, `other`.
+UPI/bank-transfer/card references are required; cash/other references are optional.
+Provided references use the backend's 3–120 character allowlist. Currency input
+is converted with integer arithmetic only, permits up to two decimals and rejects
+amounts outside 1–1,000,000,000 paise. There is no gateway, refund, payment edit,
+delete or separate payment-write workflow. Plan terms can change after selection;
+the backend resolves and validates them at submission, and the UI displays the
+actual server result.
+
+Scoped mutations prevent duplicate submissions, ignore results after gym/account
+changes or logout/relogin, and refresh existing summary/history/detail/dashboard
+caches. Riverpod never retries writes. The existing interceptor still handles its
+single authenticated 401 recovery/replay. Transport/server failures and malformed
+write success responses are explicitly uncertain. Another write is blocked until
+an explicit successful membership/payment history recheck; inspect both histories
+before reviewing another attempt. This is not an idempotency-key mechanism, and
+an app restart/sign-in starts a new local session: always check history after an
+uncertain outcome. Read failures have safe messages, retry and refresh controls.
+
+Branch selection remains deferred; no branch parameter, bootstrap endpoint or
+arbitrary branch input is used. Paid time is review time; custom paid dates,
+backdated starts and payments on renewal are future work. Plan deletion is not supported by M12. No future
+attendance, assignment, staff or member self-service UI is included.
+
+For live verification, use the existing Android emulator development command
+against `http://10.0.2.2:8001/api/v1/` with your authorized admin session. Verify an
+active member/plan, unpaid purchase, exact partial/full cash and referenced digital
+payments, refreshed histories, cancellation/no refunds, renewal, server conflicts,
+back/logout and session refresh. Purchase/renewal require the backend's existing
+transaction-capable MongoDB setup. Automated tests use synthetic DTOs/adapters;
+no real credentials or payment credentials are included.
+
+### M30 extension: Admin membership plan management
+
+Plans in the Admin navigation lists active and inactive plans in 20-record server pages,
+with name, optional description, duration, exact INR price, status, pull-to-refresh,
+loading, empty, safe error and retry states. Create/edit forms use M12 only:
+
+- `GET /api/v1/gyms/:gymId/membership-plans?page=...&limit=20`: no status filter for management.
+- `GET /api/v1/gyms/:gymId/membership-plans/:planId`: fresh edit DTO.
+- `POST /api/v1/gyms/:gymId/membership-plans`: `name`, `durationDays`, integer-paise `price`,
+  `status` and optional `description`; 201 with the plan DTO.
+- `PATCH /api/v1/gyms/:gymId/membership-plans/:planId`: the same mutable fields; 200 with
+  the plan DTO. Blank edited description sends `null` to clear it. ID, gym scope,
+  normalized name and timestamps are never included in mutation bodies.
+
+M12 permits duration 1–3650 days, price 0–1,000,000,000 paise (free plans supported),
+active/inactive status, name up to 120 characters and optional description up to
+2000 characters. Backend name normalization, uniqueness and admin authorization
+remain authoritative. The client sends only documented fields and never logs tokens.
+There is no DELETE operation, new client, package or native/backend change.
+
+The empty purchase screen says “No active membership plans. Create a plan before
+purchasing a membership.” Its create action opens the same form; success returns
+and reloads active plans, without automatically selecting a plan or purchasing.
+Creating an inactive plan leaves the active-plan list empty by design. Failed saves
+keep entered values, surface safe errors and never automatically retry. Uncertain
+saves block another write until an explicit plan recheck; inspect the management
+list before retrying, particularly after a restart or new sign-in.
+
+Plan pages preserve forms during token refresh, verify selected gym/session scope,
+and ignore stale saves after logout/relogin. Existing logout, Dashboard, Members, Trainers and More remain intact.
+Admin navigation is Dashboard | Members | Trainers | Plans | More. Live plan creation/editing still needs
+verification with an authorized admin; automated tests use synthetic DTOs/adapters.
+
+### M30 navigation refinement
+
+Membership Plans is a first-class Admin destination alongside Dashboard, Members,
+Trainers and More. Canonical routes are `/home/plans`, `/home/plans/new?gymId=...`
+and `/home/plans/:planId?gymId=...`. Create/edit share the existing M12 models,
+repository, providers and forms. Saving from the Plans list returns to the refreshed
+list with success feedback; back navigation returns to the list without saving.
+The More shortcut remains a secondary link, and More/logout works as before.
+
+Purchase stays under Member Details → Membership & payments → Purchase membership.
+Its empty-plan shortcut opens the canonical plan creation form. Saving returns to
+purchase and reloads active plans without automatically selecting or purchasing.
+Plan lifecycle is Active/Inactive through PATCH; no delete operation exists.
+Five Material navigation destinations are verified at 320px width with enlarged
+text. Live testing should cover direct Plans navigation, create/edit/status changes,
+empty-purchase creation/return, and existing Dashboard/Members/Trainers/More/logout.

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../features/admin_dashboard/providers/dashboard_providers.dart';
+import '../router/app_routes.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/data/auth_failure.dart';
@@ -54,6 +57,11 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
           ? 'Ending your session securely.'
           : 'You are signed in.',
       actions: [
+        if (embedded && ref.watch(adminGymProvider) != null)
+          OutlinedButton(
+            onPressed: loggingOut ? null : () => context.push(AppRoutes.plans),
+            child: const Text('Membership Plans'),
+          ),
         FilledButton(
           onPressed: user == null || loggingOut
               ? null

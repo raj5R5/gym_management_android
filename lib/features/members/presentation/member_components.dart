@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../data/member_failure.dart';
 import '../providers/member_providers.dart';
+import '../models/member_models.dart';
+import '../../../shared/formatting/inr.dart';
 import '../../../shared/widgets/profile_section.dart';
 export '../../../shared/widgets/page_controls.dart';
 
@@ -54,3 +56,17 @@ class MemberContextChanged extends StatelessWidget {
 }
 
 typedef MemberSection = ProfileSection;
+
+Widget membershipText(Membership membership) => Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Text(membership.planName),
+    Text(
+      'Plan snapshot: ${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)}',
+    ),
+    Text('${membership.startDate} to ${membership.endDate} (end exclusive)'),
+    Text(
+      'Status: ${membership.status} · ${membership.currentlyActive ? 'Current' : 'Not current'}',
+    ),
+  ],
+);

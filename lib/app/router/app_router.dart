@@ -6,6 +6,10 @@ import '../../features/admin_dashboard/presentation/dashboard_page.dart';
 import '../../features/members/presentation/members_page.dart';
 import '../../features/members/presentation/member_details_page.dart';
 import '../../features/members/presentation/member_form_page.dart';
+import '../../features/memberships/presentation/membership_page.dart';
+import '../../features/memberships/presentation/purchase_page.dart';
+import '../../features/memberships/presentation/plans_page.dart';
+import '../../features/memberships/presentation/membership_detail_page.dart';
 import '../../features/trainers/presentation/trainers_page.dart';
 import '../../features/trainers/presentation/trainer_details_page.dart';
 import '../../features/trainers/presentation/trainer_form_page.dart';
@@ -39,6 +43,8 @@ GoRouter createAppRouter({
           );
       final adminPath = path.startsWith('${AppRoutes.home}/');
       final profileRoute =
+          path == AppRoutes.plans ||
+          path.startsWith('${AppRoutes.plans}/') ||
           path == AppRoutes.members ||
           path.startsWith('${AppRoutes.members}/') ||
           path == AppRoutes.trainers ||
@@ -108,6 +114,31 @@ GoRouter createAppRouter({
                 ),
                 routes: [
                   GoRoute(
+                    path: 'membership',
+                    builder: (_, state) => MembershipPage(
+                      memberId: state.pathParameters['memberId']!,
+                      gymId: state.uri.queryParameters['gymId'],
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'purchase',
+                        builder: (_, state) => PurchasePage(
+                          memberId: state.pathParameters['memberId']!,
+                          gymId: state.uri.queryParameters['gymId'],
+                        ),
+                      ),
+                      GoRoute(
+                        path: ':subscriptionId',
+                        builder: (_, state) => MembershipDetailPage(
+                          memberId: state.pathParameters['memberId']!,
+                          subscriptionId:
+                              state.pathParameters['subscriptionId']!,
+                          gymId: state.uri.queryParameters['gymId'],
+                        ),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
                     path: 'edit',
                     builder: (_, state) => MemberFormPage(
                       memberId: state.pathParameters['memberId']!,
@@ -142,6 +173,24 @@ GoRouter createAppRouter({
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+          GoRoute(
+            path: AppRoutes.plans,
+            builder: (_, _) => const PlansPage(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (_, state) =>
+                    PlanFormPage(gymId: state.uri.queryParameters['gymId']),
+              ),
+              GoRoute(
+                path: ':planId',
+                builder: (_, state) => PlanFormPage(
+                  gymId: state.uri.queryParameters['gymId'],
+                  planId: state.pathParameters['planId'],
+                ),
               ),
             ],
           ),

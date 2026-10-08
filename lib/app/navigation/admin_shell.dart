@@ -16,6 +16,7 @@ class AdminShell extends ConsumerWidget {
     AppRoutes.dashboard,
     AppRoutes.members,
     AppRoutes.trainers,
+    AppRoutes.plans,
     AppRoutes.more,
   ];
   @override
@@ -32,11 +33,14 @@ class AdminShell extends ConsumerWidget {
     }
     final memberDetail = location.startsWith('${AppRoutes.members}/');
     final trainerDetail = location.startsWith('${AppRoutes.trainers}/');
-    final profileDetail = memberDetail || trainerDetail;
+    final planDetail = location.startsWith('${AppRoutes.plans}/');
+    final profileDetail = memberDetail || trainerDetail || planDetail;
     final index = memberDetail
         ? 1
         : trainerDetail
         ? 2
+        : planDetail
+        ? 3
         : destinations.indexOf(location);
     final shell = PopScope(
       canPop: profileDetail || index <= 0,
@@ -105,6 +109,10 @@ class AdminShell extends ConsumerWidget {
             NavigationDestination(
               icon: Icon(Icons.fitness_center),
               label: 'Trainers',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.card_membership_outlined),
+              label: 'Plans',
             ),
             NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
           ],

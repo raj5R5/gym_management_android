@@ -7,6 +7,8 @@ import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../models/member_models.dart';
 import '../providers/member_providers.dart';
 import 'member_components.dart';
+import '../../memberships/presentation/billing_components.dart'
+    show membershipPath;
 
 class MemberDetailsPage extends ConsumerStatefulWidget {
   const MemberDetailsPage({
@@ -121,6 +123,11 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
             MemberSection(
               title: 'Current membership',
               children: [
+                OutlinedButton.icon(
+                  onPressed: () => context.push(membershipPath(scope)),
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  label: const Text('Membership & payments'),
+                ),
                 if (data.currentSubscription == null)
                   const Text('No current membership.')
                 else
@@ -189,20 +196,6 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
     );
   }
 }
-
-Widget membershipText(Membership membership) => Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Text(membership.planName),
-    Text(
-      'Plan snapshot: ${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)}',
-    ),
-    Text('${membership.startDate} to ${membership.endDate} (end exclusive)'),
-    Text(
-      'Status: ${membership.status} · ${membership.currentlyActive ? 'Current' : 'Not current'}',
-    ),
-  ],
-);
 
 class _MembershipHistory extends ConsumerWidget {
   const _MembershipHistory({required this.request, required this.onPage});
