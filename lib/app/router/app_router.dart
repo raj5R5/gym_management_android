@@ -6,6 +6,9 @@ import '../../features/admin_dashboard/presentation/dashboard_page.dart';
 import '../../features/members/presentation/members_page.dart';
 import '../../features/members/presentation/member_details_page.dart';
 import '../../features/members/presentation/member_form_page.dart';
+import '../../features/trainers/presentation/trainers_page.dart';
+import '../../features/trainers/presentation/trainer_details_page.dart';
+import '../../features/trainers/presentation/trainer_form_page.dart';
 import '../../features/auth/models/auth_models.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/presentation/login_page.dart';
@@ -35,17 +38,20 @@ GoRouter createAppRouter({
                 grant.status == AccountStatus.active,
           );
       final adminPath = path.startsWith('${AppRoutes.home}/');
-      final memberRoute =
-          path == AppRoutes.members || path.startsWith('${AppRoutes.members}/');
+      final profileRoute =
+          path == AppRoutes.members ||
+          path.startsWith('${AppRoutes.members}/') ||
+          path == AppRoutes.trainers ||
+          path.startsWith('${AppRoutes.trainers}/');
       if (current is SessionInitial ||
           current is SessionLoading &&
               current.operation == SessionOperation.restoring) {
         target = AppRoutes.startup;
       } else if (current is SessionLoading &&
           current.operation == SessionOperation.refreshing) {
-        // Retain member forms/read scopes during interceptor recovery. AdminShell
+        // Retain profile forms/read scopes during interceptor recovery. AdminShell
         // hides the protected subtree and shows startup until recovery finishes.
-        target = memberRoute ? null : AppRoutes.startup;
+        target = profileRoute ? null : AppRoutes.startup;
       } else if (current is SessionLoading &&
           current.operation == SessionOperation.loggingOut) {
         target = AppRoutes.home;
@@ -114,7 +120,30 @@ GoRouter createAppRouter({
           ),
           GoRoute(
             path: AppRoutes.trainers,
-            builder: (_, _) => const AdminComingSoonPage(title: 'Trainers'),
+            builder: (_, _) => const TrainersPageView(),
+            routes: [
+              GoRoute(
+                path: 'new',
+                builder: (_, state) =>
+                    TrainerFormPage(gymId: state.uri.queryParameters['gymId']),
+              ),
+              GoRoute(
+                path: ':trainerId',
+                builder: (_, state) => TrainerDetailsPage(
+                  trainerId: state.pathParameters['trainerId']!,
+                  gymId: state.uri.queryParameters['gymId'],
+                ),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (_, state) => TrainerFormPage(
+                      trainerId: state.pathParameters['trainerId']!,
+                      gymId: state.uri.queryParameters['gymId'],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
           GoRoute(
             path: AppRoutes.more,

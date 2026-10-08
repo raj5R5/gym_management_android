@@ -277,3 +277,65 @@ Automated tests use synthetic records and in-memory HTTP adapters. Network write
 already sent cannot be recalled when navigating or logging out; after an ambiguous
 network save failure, check Members before retrying. A retried onboarding code is
 still protected by the backend's uniqueness constraint.
+
+## M29: Admin trainer management
+
+Trainers is now a functional admin section using the production M10 API. It offers
+server search (code, name, phone and specialization), status filters, 20-record
+server pages, pull-to-refresh, explicit refresh, loading/empty/error/retry states,
+profile details, standalone creation and profile editing. Pagination respects the
+API limits of 100 per page and page 10,000. Detail/edit routes carry the opening
+gym context and refuse to reuse a trainer ID after the selected gym changes.
+Branch choices remain unavailable; creation omits `branchId`, and PATCH omits it
+to preserve the existing assignment. The DTO only supplies a branch ID, which is
+shown honestly without inventing a name or using bootstrap endpoints.
+
+The `features/trainers` models/repository/providers/presentation follow M28 and use
+`authenticatedApiClientProvider`. Common JSON parsing, profile address and
+pagination models, profile validators, pagination controls and section cards are
+shared with Members. Member exports/type aliases preserve their existing API.
+There is no generic CRUD framework, new HTTP client, session authority or package.
+Scoped providers invalidate list/dashboard/details after successful saves and
+ignore results after context loss. Separate detail/editor reads let the editor
+obtain a fresh server profile without its own save invalidation discarding the
+form. Trainer routes reuse M28's offstage/startup handling during token recovery,
+so successful refresh preserves form input while hiding protected UI.
+
+Exact production endpoints, all under `/api/v1/gyms/:gymId/trainers`:
+
+- `GET /`: `page`/`limit` and optional `search`/`status`. Response `data` is the
+  trainer DTO array; `meta.pagination` contains `{ page, limit, total }`.
+- `GET /:trainerId`: one trainer DTO.
+- `POST /`: required `trainerCode`, `firstName`, `lastName`, `phone`; supported
+  optional `status` (server default active), birth date, gender, address and
+  specializations. The form supplies an explicit selected status, initially active.
+- `PATCH /:trainerId`: mutable names/phone/status and optional profile fields.
+  Nullable birth date/gender/address/specializations may be cleared. Trainer code,
+  gym ID, account linkage, roles, permissions and branch are never request inputs.
+
+Responses use `{ success, data, meta }`; POST returns 201, reads/PATCH return 200.
+The DTO contains id, gymId, trainerCode, names, phone, status, optional branchId,
+birth date, gender, address, specializations, createdAt/updatedAt, and optional
+userId. Account IDs are deliberately not retained/displayed because no useful
+account display/provisioning workflow is part of M29.
+
+Codes use 2–32 letters/digits/underscores/hyphens and server uppercase normalization.
+Names allow 1–80 characters, phones 7–15 digits within 25 allowed characters,
+birth dates strict nonfuture `YYYY-MM-DD`, and gender the existing five-value enum.
+An optional address requires line1/city/two-uppercase-letter countryCode, with
+optional line2/state/postalCode. Specializations use up to 10 case-insensitively
+distinct entries of 1–80 characters. The form uses one entry per line so commas
+remain literal. Blank specialization input clears the field on edit; the API also
+supports explicit empty lists. Client checks improve feedback; backend validation
+and authorization remain authoritative.
+
+No account/grant, assignment, membership, payment or attendance workflow is created.
+Duplicate codes receive a safe specific error; generic backend validation has no
+field-level details. An ambiguous network/server save failure tells the admin to
+check Trainers before retrying without changing the code. Saves are not retried
+by Riverpod; the existing interceptor remains responsible for its one 401 retry.
+
+For live verification, run the existing development emulator command above against
+port 8001 with an authorized admin session; verify list/search/filter/pagination,
+create/edit/details/nullable clearing, refresh and logout. Automated tests use
+synthetic DTOs and in-memory adapters. No credentials are included in the app.

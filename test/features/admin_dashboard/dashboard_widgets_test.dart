@@ -12,11 +12,13 @@ import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_
 import 'package:gym_management_app/features/auth/data/auth_failure.dart';
 import 'package:gym_management_app/features/auth/models/auth_models.dart';
 import 'package:gym_management_app/features/members/providers/member_providers.dart';
+import 'package:gym_management_app/features/trainers/providers/trainer_providers.dart';
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/auth/providers/session_controller.dart';
 
 import '../auth/auth_fakes.dart';
 import '../members/member_fakes.dart';
+import '../trainers/trainer_fakes.dart';
 import 'dashboard_fakes.dart';
 
 void main() {
@@ -37,6 +39,9 @@ void main() {
             ..value = authenticated ? syntheticCredential() : null,
         ),
         dashboardRepositoryProvider.overrideWithValue(repository),
+        trainerRepositoryProvider.overrideWithValue(
+          FakeTrainerRepository()..empty = true,
+        ),
         memberRepositoryProvider.overrideWithValue(
           FakeMemberRepository()..empty = true,
         ),
@@ -144,38 +149,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.requests.length, 3);
   });
-  testWidgets(
-    'members section, trainer placeholder, back to dashboard, more/logout',
-    (tester) async {
-      final scope = await pumpAdmin(tester, FakeDashboardRepository());
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Members').last);
-      await tester.pumpAndSettle();
-      expect(
-        find.text('No members yet. Add your first member.'),
-        findsOneWidget,
-      );
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(
-        scope.read(appRouterProvider).routeInformationProvider.value.uri.path,
-        AppRoutes.dashboard,
-      );
-      await tester.tap(find.text('Trainers').last);
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Trainers will be available in a later milestone.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('More'));
-      await tester.pumpAndSettle();
-      expect(find.byType(AppBar), findsOneWidget);
-      await tester.tap(find.text('Logout'));
-      await tester.pumpAndSettle();
-      expect(find.text('Sign in to your account'), findsOneWidget);
-      expect(find.byType(NavigationBar), findsNothing);
-    },
-  );
+  testWidgets('member/trainer sections, back to dashboard, more/logout', (
+    tester,
+  ) async {
+    final scope = await pumpAdmin(tester, FakeDashboardRepository());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Members').last);
+    await tester.pumpAndSettle();
+    expect(find.text('No members yet. Add your first member.'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(
+      scope.read(appRouterProvider).routeInformationProvider.value.uri.path,
+      AppRoutes.dashboard,
+    );
+    await tester.tap(find.text('Trainers').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('No trainers yet. Add your first trainer.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+    await tester.tap(find.text('Logout'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+  });
   testWidgets('trainer cannot navigate into admin shell or call dashboard', (
     tester,
   ) async {

@@ -31,11 +31,17 @@ class AdminShell extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final memberDetail = location.startsWith('${AppRoutes.members}/');
-    final index = memberDetail ? 1 : destinations.indexOf(location);
+    final trainerDetail = location.startsWith('${AppRoutes.trainers}/');
+    final profileDetail = memberDetail || trainerDetail;
+    final index = memberDetail
+        ? 1
+        : trainerDetail
+        ? 2
+        : destinations.indexOf(location);
     final shell = PopScope(
-      canPop: memberDetail || index <= 0,
+      canPop: profileDetail || index <= 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !memberDetail) context.go(AppRoutes.dashboard);
+        if (!didPop && !profileDetail) context.go(AppRoutes.dashboard);
       },
       child: Scaffold(
         appBar: AppBar(
@@ -115,19 +121,4 @@ class AdminShell extends ConsumerWidget {
       ],
     );
   }
-}
-
-class AdminComingSoonPage extends StatelessWidget {
-  const AdminComingSoonPage({super.key, required this.title});
-  final String title;
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Text(
-        '$title will be available in a later milestone.',
-        textAlign: TextAlign.center,
-      ),
-    ),
-  );
 }

@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../data/member_failure.dart';
 import '../providers/member_providers.dart';
+import '../../../shared/widgets/profile_section.dart';
+export '../../../shared/widgets/page_controls.dart';
 
 String memberPath(MemberScope scope, {bool edit = false}) =>
     '${AppRoutes.members}/${scope.memberId}${edit ? '/edit' : ''}?gymId=${Uri.encodeQueryComponent(scope.gymId)}';
@@ -51,53 +53,4 @@ class MemberContextChanged extends StatelessWidget {
   );
 }
 
-class MemberSection extends StatelessWidget {
-  const MemberSection({super.key, required this.title, required this.children});
-  final String title;
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          ...children,
-        ],
-      ),
-    ),
-  );
-}
-
-class PageControls extends StatelessWidget {
-  const PageControls({
-    super.key,
-    required this.page,
-    required this.total,
-    required this.previous,
-    required this.next,
-  });
-  final int page, total;
-  final VoidCallback? previous, next;
-  @override
-  Widget build(BuildContext context) => Wrap(
-    alignment: WrapAlignment.center,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    spacing: 8,
-    children: [
-      IconButton(
-        tooltip: 'Previous page',
-        onPressed: previous,
-        icon: const Icon(Icons.chevron_left),
-      ),
-      Text('Page $page · $total total'),
-      IconButton(
-        tooltip: 'Next page',
-        onPressed: next,
-        icon: const Icon(Icons.chevron_right),
-      ),
-    ],
-  );
-}
+typedef MemberSection = ProfileSection;
