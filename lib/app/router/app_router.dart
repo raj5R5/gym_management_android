@@ -6,19 +6,25 @@ import '../../features/admin_dashboard/presentation/dashboard_page.dart';
 import '../../features/members/presentation/members_page.dart';
 import '../../features/members/presentation/member_details_page.dart';
 import '../../features/members/presentation/member_form_page.dart';
+import '../../features/members/presentation/member_onboarding_page.dart';
 import '../../features/memberships/presentation/membership_page.dart';
 import '../../features/memberships/presentation/purchase_page.dart';
 import '../../features/memberships/presentation/plans_page.dart';
 import '../../features/memberships/presentation/membership_detail_page.dart';
+import '../../features/memberships/presentation/revenue_details_page.dart';
+import '../../features/memberships/presentation/outstanding_dues_page.dart';
 import '../../features/trainers/presentation/trainers_page.dart';
 import '../../features/trainers/presentation/trainer_details_page.dart';
 import '../../features/trainers/presentation/trainer_form_page.dart';
 import '../../features/auth/models/auth_models.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/auth/presentation/owner_signup_page.dart';
+import '../../features/auth/models/owner_registration.dart';
 import '../../features/auth/providers/session_controller.dart';
 import '../../shared/widgets/message_page.dart';
 import '../navigation/admin_shell.dart';
+import '../navigation/form_navigation_guard.dart';
 import '../navigation/foundation_screens.dart';
 import 'app_routes.dart';
 import '../../features/attendance/presentation/attendance_page.dart';
@@ -28,6 +34,16 @@ GoRouter createAppRouter({
   required SessionState Function() session,
   required Listenable refreshListenable,
 }) {
+  Future<bool> protectForm(BuildContext context, GoRouterState state) async {
+    // Session redirects remain authoritative; draft dialogs cannot retain a
+    // protected route after authentication is lost.
+    if (session() is! SessionAuthenticated) return true;
+    return ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(formNavigationGuardProvider).allowExit(path: state.uri.path);
+  }
+
   return GoRouter(
     initialLocation: AppRoutes.startup,
     refreshListenable: refreshListenable,
@@ -45,6 +61,8 @@ GoRouter createAppRouter({
           );
       final adminPath = path.startsWith('${AppRoutes.home}/');
       final profileRoute =
+          path == AppRoutes.revenue ||
+          path == AppRoutes.outstandingDues ||
           path == AppRoutes.attendance ||
           path.startsWith('${AppRoutes.attendance}/') ||
           path == AppRoutes.plans ||
@@ -69,6 +87,7 @@ GoRouter createAppRouter({
         if (path == '/' ||
             path == AppRoutes.startup ||
             path == AppRoutes.login ||
+            path == AppRoutes.signup ||
             (path == AppRoutes.home && isAdmin)) {
           target = isAdmin ? AppRoutes.dashboard : AppRoutes.home;
         }
@@ -88,7 +107,16 @@ GoRouter createAppRouter({
         path: AppRoutes.startup,
         builder: (_, _) => const StartupScreen(),
       ),
-      GoRoute(path: AppRoutes.login, builder: (_, _) => const LoginPage()),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (_, state) => LoginPage(
+          registrationSucceeded: state.extra is OwnerRegistrationSuccess,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.signup,
+        builder: (_, _) => const OwnerSignupPage(),
+      ),
       GoRoute(
         path: AppRoutes.home,
         builder: (_, _) => const AuthenticatedHomeScreen(),
@@ -100,6 +128,22 @@ GoRouter createAppRouter({
           GoRoute(
             path: AppRoutes.dashboard,
             builder: (_, _) => const DashboardPage(),
+            routes: [
+              GoRoute(
+                path: 'revenue',
+                builder: (_, state) => RevenueDetailsPage(
+                  gymId: state.uri.queryParameters['gymId'],
+                  from: state.uri.queryParameters['from'],
+                  to: state.uri.queryParameters['to'],
+                ),
+              ),
+              GoRoute(
+                path: 'dues',
+                builder: (_, state) => OutstandingDuesPage(
+                  gymId: state.uri.queryParameters['gymId'],
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: AppRoutes.members,
@@ -107,8 +151,10 @@ GoRouter createAppRouter({
             routes: [
               GoRoute(
                 path: 'new',
-                builder: (_, state) =>
-                    MemberFormPage(gymId: state.uri.queryParameters['gymId']),
+                onExit: protectForm,
+                builder: (_, state) => MemberOnboardingPage(
+                  gymId: state.uri.queryParameters['gymId'],
+                ),
               ),
               GoRoute(
                 path: ':memberId',
@@ -144,6 +190,7 @@ GoRouter createAppRouter({
                   ),
                   GoRoute(
                     path: 'edit',
+                    onExit: protectForm,
                     builder: (_, state) => MemberFormPage(
                       memberId: state.pathParameters['memberId']!,
                       gymId: state.uri.queryParameters['gymId'],
@@ -182,7 +229,10 @@ GoRouter createAppRouter({
           ),
           GoRoute(
             path: AppRoutes.plans,
-            builder: (_, _) => const PlansPage(),
+            builder: (_, state) => PlansPage(
+              initialActiveOnly:
+                  state.uri.queryParameters['status'] == 'active',
+            ),
             routes: [
               GoRoute(
                 path: 'new',

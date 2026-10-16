@@ -72,6 +72,17 @@ class DashboardQueryController extends Notifier<DashboardQuery> {
   void selectRange(CalendarDate from, CalendarDate to) =>
       state = DashboardQuery.range(from, to);
   void useGymToday() => state = const DashboardQuery.today();
+  void selectPreset(DashboardDateFilter filter) {
+    if (filter == state.filter) return;
+    state = switch (filter) {
+      DashboardDateFilter.today => const DashboardQuery.today(),
+      DashboardDateFilter.last7Days => const DashboardQuery.last7Days(),
+      DashboardDateFilter.thisMonth => const DashboardQuery.thisMonth(),
+      DashboardDateFilter.customRange => throw ArgumentError(
+        'Select exact dates.',
+      ),
+    };
+  }
 }
 
 final dashboardQueryProvider =

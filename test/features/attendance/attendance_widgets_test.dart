@@ -205,7 +205,7 @@ void main() {
       await tester.pumpAndSettle();
       repository.calls.clear();
       expect(find.byTooltip('Attendance'), findsNothing);
-      expect(find.byType(NavigationDestination), findsNWidgets(5));
+      expect(find.byType(NavigationDestination), findsNWidgets(4));
       await tester.tap(find.byTooltip('Admin navigation'));
       await tester.pumpAndSettle();
       expect(find.widgetWithText(ListTile, 'Attendance'), findsNothing);
@@ -222,6 +222,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Logout'), findsOneWidget);
       expect(repository.calls, isEmpty);
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Logout'));
       await tester.tap(find.widgetWithText(FilledButton, 'Logout'));
       await tester.pumpAndSettle();
       expect(find.text('Sign in to your account'), findsOneWidget);

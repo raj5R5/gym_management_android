@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../app/router/app_routes.dart';
+import '../../../shared/widgets/brand_mark.dart';
 
 import '../data/auth_failure.dart';
 import '../models/session_state.dart';
 import '../providers/session_controller.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.registrationSucceeded = false});
+  final bool registrationSucceeded;
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
@@ -67,22 +71,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.fitness_center,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(height: 16),
+                      const BrandMark(),
+                      const SizedBox(height: 32),
                       Text(
                         'Gym Management',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Run your gym.\nWith clarity.',
+                        style: Theme.of(context).textTheme.displaySmall,
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'Sign in to your account',
-                        textAlign: TextAlign.center,
+                        textAlign: TextAlign.left,
                       ),
+                      if (widget.registrationSucceeded) ...[
+                        const SizedBox(height: 16),
+                        Semantics(
+                          liveRegion: true,
+                          child: const Text(
+                            'Account and gym created. Sign in to continue.',
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 32),
                       TextFormField(
                         controller: _email,
@@ -172,7 +187,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                         strokeWidth: 2,
                                         color: Theme.of(
                                           context,
-                                        ).colorScheme.onSurface,
+                                        ).colorScheme.onPrimary,
                                         semanticsLabel: 'Signing in',
                                       ),
                                     ),
@@ -182,6 +197,36 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 )
                               : const Text('Login'),
                         ),
+                      ),
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () => context.go(AppRoutes.signup),
+                        child: const Text('Sign Up'),
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.shield_outlined,
+                            size: 18,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Your daily operations. One considered workspace.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

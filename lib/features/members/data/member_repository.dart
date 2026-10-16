@@ -25,6 +25,33 @@ abstract interface class MemberRepository {
   );
 }
 
+/// One authoritative, deduplicated history snapshot, including future/expired
+/// periods. Callers supply their live account/gym guard between paginated reads.
+extension MemberMembershipHistory on MemberRepository {
+  Future<List<Membership>> allMemberships(
+    String gymId,
+    String memberId, {
+    required void Function() guard,
+    Future<MembershipHistory> Function(int page)? readPage,
+  }) async {
+    final records = <String, Membership>{};
+    for (var page = 1; ; page++) {
+      guard();
+      final history =
+          await (readPage?.call(page) ?? memberships(gymId, memberId, page));
+      guard();
+      for (final record in [
+        ...history.subscriptions,
+        if (history.current != null) history.current!,
+      ]) {
+        records[record.id] = record;
+      }
+      if (!history.pagination.hasNext) break;
+    }
+    return List.unmodifiable(records.values);
+  }
+}
+
 class DioMemberRepository implements MemberRepository {
   DioMemberRepository(this._client);
   final Dio _client;

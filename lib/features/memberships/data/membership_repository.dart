@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../members/data/member_repository.dart';
 import '../../members/models/member_models.dart';
 import '../models/billing_models.dart';
+import '../models/renewal_preview.dart';
 import 'billing_failure.dart';
 
 abstract interface class MembershipRepository {
@@ -29,11 +30,17 @@ abstract interface class MembershipRepository {
     String subscriptionId,
     String reason,
   );
-  Future<BillingResult> renew(
+  Future<RenewalPreview> renewalPreview(
     String gymId,
     String memberId,
     String subscriptionId,
   );
+  Future<BillingResult> renew(
+    String gymId,
+    String memberId,
+    String subscriptionId, {
+    RenewalPreview? preview,
+  });
 }
 
 class DioMembershipRepository implements MembershipRepository {
@@ -293,23 +300,63 @@ class DioMembershipRepository implements MembershipRepository {
   }
 
   @override
-  Future<BillingResult> renew(
+  Future<RenewalPreview> renewalPreview(
     String gymId,
     String memberId,
     String subscriptionId,
-  ) async {
+  ) {
+    final path =
+        '${_gym(gymId, memberId, subscriptionId)}/subscriptions/$subscriptionId/renewal-preview';
+    return _request(() => _client.get(path), (response) {
+      final preview = RenewalPreview.fromJson(object(response['data']));
+      if (preview.gymId != gymId ||
+          preview.memberId != memberId ||
+          preview.subscriptionId != subscriptionId) {
+        throw const FormatException('Renewal preview scope mismatch.');
+      }
+      return preview;
+    });
+  }
+
+  @override
+  Future<BillingResult> renew(
+    String gymId,
+    String memberId,
+    String subscriptionId, {
+    RenewalPreview? preview,
+  }) async {
+    if (preview != null &&
+        (preview.gymId != gymId ||
+            preview.memberId != memberId ||
+            preview.subscriptionId != subscriptionId)) {
+      throw const BillingFailure(
+        'The renewal preview belongs to another membership.',
+      );
+    }
     final path =
         '${_gym(gymId, memberId, subscriptionId)}/subscriptions/$subscriptionId/renew';
     // Renewal's URL does not contain memberId. Verify ownership through M23 first.
     await _members.membership(gymId, memberId, subscriptionId);
-    return _request(() => _client.post(path, data: <String, dynamic>{}), (
-      response,
-    ) {
-      final subscription = _subscription(response['data'], gymId, memberId);
-      if (subscription.previousId != subscriptionId) {
-        throw const FormatException('Predecessor mismatch.');
-      }
-      return BillingResult(subscription);
-    }, writing: true);
+    return _request(
+      () =>
+          _client.post(path, data: preview?.toRequest() ?? <String, dynamic>{}),
+      (response) {
+        final subscription = _subscription(response['data'], gymId, memberId);
+        if (subscription.previousId != subscriptionId) {
+          throw const FormatException('Predecessor mismatch.');
+        }
+        if (preview != null &&
+            (subscription.planId != preview.planId ||
+                subscription.planName != preview.planName ||
+                subscription.pricePaise != preview.pricePaise ||
+                subscription.durationDays != preview.durationDays ||
+                subscription.startDate.compareTo(preview.startDate) != 0 ||
+                subscription.endDate.compareTo(preview.endDate) != 0)) {
+          throw const FormatException('Renewal terms mismatch.');
+        }
+        return BillingResult(subscription);
+      },
+      writing: true,
+    );
   }
 }

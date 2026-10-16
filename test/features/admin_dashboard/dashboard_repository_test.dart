@@ -21,6 +21,19 @@ void main() {
     repository = DioDashboardRepository(client);
   });
   tearDown(() => client.close(force: true));
+  test('parses outstanding dues separately from successful revenue', () async {
+    client.httpClientAdapter = CallbackAdapter(
+      (_) => jsonResponse(
+        success(dashboardJson(revenue: 100000, outstanding: 50000)),
+      ),
+    );
+    final dashboard = await repository.getDashboard(
+      gymA,
+      const DashboardQuery.today(),
+    );
+    expect(dashboard.payments.periodSuccessfulAmountPaise, 100000);
+    expect(dashboard.payments.outstandingAmountPaise, 50000);
+  });
   test('exact endpoint/envelope with default dates and no branchId', () async {
     client.httpClientAdapter = CallbackAdapter((request) {
       expect(request.uri.path, '/api/v1/gyms/$gymA/dashboard');
@@ -49,6 +62,44 @@ void main() {
       DashboardQuery.range(CalendarDate(2026, 3, 1), CalendarDate(2026, 3, 1)),
     );
   });
+  for (final query in [
+    const DashboardQuery.last7Days(),
+    const DashboardQuery.thisMonth(),
+  ]) {
+    test(
+      'quick ${query.filter} sends one server preset without phone-derived dates',
+      () async {
+        final json = dashboardJson();
+        (json['period'] as Map)
+          ..['to'] = query.filter == DashboardDateFilter.last7Days
+              ? '2026-03-07'
+              : '2026-03-31'
+          ..['endUtc'] = query.filter == DashboardDateFilter.last7Days
+              ? '2026-03-07T18:30:00.000Z'
+              : '2026-03-31T18:30:00.000Z';
+        final adapter = CallbackAdapter((request) {
+          expect(request.queryParameters, query.toParameters());
+          expect(request.queryParameters.containsKey('from'), isFalse);
+          expect(request.queryParameters.containsKey('branchId'), isFalse);
+          return jsonResponse(success(json));
+        });
+        client.httpClientAdapter = adapter;
+        final data = await repository.getDashboard(gymA, query);
+        expect(data.period.from.toString(), '2026-03-01');
+        expect(data.payments.outstandingAmountPaise, 50000);
+        expect(adapter.requests, hasLength(1));
+      },
+    );
+    test('quick ${query.filter} rejects mismatched period response', () async {
+      client.httpClientAdapter = CallbackAdapter(
+        (_) => jsonResponse(success(dashboardJson())),
+      );
+      await expectLater(
+        repository.getDashboard(gymA, query),
+        throwsA(isA<AuthFailure>()),
+      );
+    });
+  }
   test('invalid gym ID never reaches transport', () async {
     final adapter = CallbackAdapter(
       (_) => jsonResponse(success(dashboardJson())),

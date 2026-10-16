@@ -6,8 +6,12 @@ import '../../auth/providers/session_controller.dart';
 import '../../members/data/member_failure.dart';
 import '../../members/providers/member_providers.dart';
 import '../data/billing_failure.dart';
+import '../../members/data/member_repository.dart';
+import '../models/membership_eligibility.dart';
 import '../data/membership_repository.dart';
 import '../models/billing_models.dart';
+import '../models/renewal_preview.dart';
+import 'payment_providers.dart';
 
 final membershipRepositoryProvider = Provider<MembershipRepository>(
   (ref) => DioMembershipRepository(
@@ -34,6 +38,25 @@ final paymentHistoryProvider = FutureProvider.autoDispose
       return ref
           .watch(membershipRepositoryProvider)
           .payments(request.scope.gymId, request.scope.memberId, request.page);
+    }, retry: (_, _) => null);
+
+typedef RenewalRequest = ({MemberScope scope, String subscriptionId});
+final renewalPreviewProvider = FutureProvider.autoDispose
+    .family<RenewalPreview?, RenewalRequest>((ref, request) async {
+      final gym = ref.watch(adminGymProvider);
+      final repository = ref.watch(membershipRepositoryProvider);
+      if (!matchesScope(gym, request.scope)) return null;
+      final preview = await repository.renewalPreview(
+        request.scope.gymId,
+        request.scope.memberId,
+        request.subscriptionId,
+      );
+      if (!ref.mounted ||
+          !matchesScope(ref.read(adminGymProvider), request.scope) ||
+          !identical(repository, ref.read(membershipRepositoryProvider))) {
+        return null;
+      }
+      return preview;
     }, retry: (_, _) => null);
 
 class BillingMutationController extends AsyncNotifier<BillingResult?> {
@@ -63,17 +86,23 @@ class BillingMutationController extends AsyncNotifier<BillingResult?> {
       matchesScope(ref.read(adminGymProvider), scope) &&
       ref.read(sessionControllerProvider) is SessionAuthenticated;
   void _invalidate() {
+    ref.invalidate(membersProvider);
+    ref.invalidate(renewalPreviewProvider);
     ref.invalidate(memberSummaryProvider(scope));
     // All cached history pages/details may shift after a mutation.
     ref.invalidate(memberHistoryProvider);
+    ref.invalidate(memberMembershipsProvider(scope));
     ref.invalidate(membershipDetailProvider);
     ref.invalidate(paymentHistoryProvider);
     ref.invalidate(dashboardProvider);
+    ref.invalidate(outstandingDuesProvider);
+    ref.invalidate(revenueDetailsProvider);
   }
 
   Future<BillingResult?> _run(
-    Future<BillingResult> Function(MembershipRepository) operation,
-  ) async {
+    Future<BillingResult> Function(MembershipRepository) operation, {
+    bool createsMembership = false,
+  }) async {
     if (_busy || _uncertain || !_current()) return null;
     final auth = ref.read(authRepositoryProvider);
     final revision = auth.revision;
@@ -84,6 +113,24 @@ class BillingMutationController extends AsyncNotifier<BillingResult?> {
     _busy = true;
     state = const AsyncLoading();
     try {
+      if (createsMembership) {
+        final memberships = await ref
+            .read(memberRepositoryProvider)
+            .allMemberships(
+              scope.gymId,
+              scope.memberId,
+              guard: () {
+                if (!current()) {
+                  throw const BillingFailure('The account or gym changed.');
+                }
+              },
+            );
+        if (blockingMembership(memberships) != null) {
+          ref.invalidate(memberMembershipsProvider(scope));
+          throw const BillingFailure(activeMembershipMessage);
+        }
+      }
+      if (!current()) return null;
       final result = await operation(ref.read(membershipRepositoryProvider));
       if (!current()) return null;
       _invalidate();
@@ -111,12 +158,16 @@ class BillingMutationController extends AsyncNotifier<BillingResult?> {
 
   Future<BillingResult?> purchase(PurchaseDraft draft) => _run(
     (repository) => repository.purchase(scope.gymId, scope.memberId, draft),
+    createsMembership: true,
   );
   Future<BillingResult?> cancel(String id, String reason) => _run(
     (repository) => repository.cancel(scope.gymId, scope.memberId, id, reason),
   );
-  Future<BillingResult?> renew(String id) =>
-      _run((repository) => repository.renew(scope.gymId, scope.memberId, id));
+  Future<BillingResult?> renew(String id, {RenewalPreview? preview}) => _run(
+    (repository) =>
+        repository.renew(scope.gymId, scope.memberId, id, preview: preview),
+    createsMembership: true,
+  );
 
   /// Explicit recheck only, never a resubmission. Both histories must load before
   /// unlocking another manual review. Kept across screen navigation per scope.

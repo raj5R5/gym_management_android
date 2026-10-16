@@ -8,7 +8,9 @@ import '../../members/presentation/member_components.dart';
 import '../../../shared/formatting/inr.dart';
 import '../models/billing_models.dart';
 import '../providers/membership_providers.dart';
+import '../providers/payment_providers.dart';
 import 'billing_components.dart';
+import 'payment_transaction_details.dart';
 
 class MembershipPage extends ConsumerStatefulWidget {
   const MembershipPage({
@@ -38,6 +40,7 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
     final gym = ref.watch(adminGymProvider);
     if (gym == null) return const SizedBox.shrink();
     if (gym.gymId != widget.gymId) return const MemberContextChanged();
+    final timezone = ref.watch(paymentTimezoneProvider(gym)).asData?.value;
     final scope = scopeFor(gym, widget.memberId);
     final historyRequest = (scope: scope, page: _historyPage);
     final paymentRequest = (scope: scope, page: _paymentPage);
@@ -203,6 +206,7 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
           ),
           ProfileSection(
             title: 'Successful payment history',
+            icon: Icons.receipt_long_outlined,
             children: [
               if (payments.isLoading)
                 const Center(child: CircularProgressIndicator())
@@ -217,18 +221,14 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                 if (data.items.isEmpty) const Text('No successful payments.'),
                 ...data.items.map(
                   (payment) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${formatInrPaise(payment.amountPaise)} · ${payment.method.label}',
+                        PaymentTransactionDetails(
+                          payment: payment,
+                          timezone: timezone,
                         ),
-                        Text(
-                          'Paid: ${payment.paidAt.toUtc().toIso8601String()} (UTC)',
-                        ),
-                        if (payment.reference != null)
-                          Text('Reference: ${payment.reference}'),
                         TextButton(
                           onPressed: () => context.push(
                             membershipPath(

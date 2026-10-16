@@ -9,12 +9,30 @@ import 'membership_providers.dart';
 
 typedef PlanPageRequest = ({AdminGymContext gym, int page});
 typedef PlanScope = ({AdminGymContext gym, String planId});
+
+/// The active-plan endpoint reports the gym-wide total in pagination metadata.
+/// No per-page counting, synthetic member scope, or revenue-date dependency.
+final activePlanCountProvider = FutureProvider<int?>((ref) async {
+  final gym = ref.watch(adminGymProvider);
+  if (gym == null) return null;
+  final page = await ref
+      .watch(membershipRepositoryProvider)
+      .plans(gym.gymId, 1);
+  return page.pagination.total;
+}, retry: (_, _) => null);
 final managedPlansProvider = FutureProvider.autoDispose
     .family<BillingPage<MembershipPlan>?, PlanPageRequest>((ref, request) {
       if (ref.watch(adminGymProvider) != request.gym) return null;
       return ref
           .watch(membershipRepositoryProvider)
           .managePlans(request.gym.gymId, request.page);
+    }, retry: (_, _) => null);
+final activeManagedPlansProvider = FutureProvider.autoDispose
+    .family<BillingPage<MembershipPlan>?, PlanPageRequest>((ref, request) {
+      if (ref.watch(adminGymProvider) != request.gym) return null;
+      return ref
+          .watch(membershipRepositoryProvider)
+          .plans(request.gym.gymId, request.page);
     }, retry: (_, _) => null);
 final planDetailProvider = FutureProvider.autoDispose
     .family<MembershipPlan?, PlanScope>((ref, scope) {
@@ -62,7 +80,9 @@ class PlanMutationController extends AsyncNotifier<MembershipPlan?> {
           );
       if (!_current(revision)) return null;
       ref.invalidate(managedPlansProvider);
+      ref.invalidate(activeManagedPlansProvider);
       ref.invalidate(activePlansProvider);
+      ref.invalidate(activePlanCountProvider);
       // The editor keeps its own fresh read until it leaves, preserving input.
       state = AsyncData(plan);
       return plan;
@@ -99,7 +119,9 @@ class PlanMutationController extends AsyncNotifier<MembershipPlan?> {
       }
       if (!_current(revision)) return;
       ref.invalidate(managedPlansProvider);
+      ref.invalidate(activeManagedPlansProvider);
       ref.invalidate(activePlansProvider);
+      ref.invalidate(activePlanCountProvider);
       _uncertain = null;
       state = const AsyncData(null);
     } catch (_, stack) {

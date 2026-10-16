@@ -196,4 +196,61 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(scope.read(dashboardProvider).asData!.value!.isEmpty, isTrue);
   });
+  test(
+    'changing presets ignores older completions and retains the latest filter',
+    () async {
+      final pending = PendingRepository();
+      final scope = ProviderContainer(
+        overrides: [
+          authApiServiceProvider.overrideWithValue(api),
+          credentialStorageProvider.overrideWithValue(FakeCredentialStorage()),
+          dashboardRepositoryProvider.overrideWithValue(pending),
+        ],
+      );
+      addTearDown(scope.dispose);
+      await scope
+          .read(sessionControllerProvider.notifier)
+          .login(
+            email: 'person@example.invalid',
+            password: syntheticCredential(),
+          );
+      scope.listen(dashboardProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      scope
+          .read(dashboardQueryProvider.notifier)
+          .selectPreset(DashboardDateFilter.last7Days);
+      scope.read(dashboardProvider.future);
+      await Future<void>.delayed(Duration.zero);
+      scope
+          .read(dashboardQueryProvider.notifier)
+          .selectPreset(DashboardDateFilter.thisMonth);
+      final latest = scope.read(dashboardProvider.future);
+      await Future<void>.delayed(Duration.zero);
+      expect(pending.requests, hasLength(3));
+      pending.requests[2].complete(
+        GymDashboard.fromJson(dashboardJson(revenue: 300000)),
+      );
+      await latest;
+      pending.requests[1].complete(
+        GymDashboard.fromJson(dashboardJson(revenue: 100000)),
+      );
+      pending.requests[0].complete(
+        GymDashboard.fromJson(dashboardJson(revenue: 0)),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        scope
+            .read(dashboardProvider)
+            .asData!
+            .value!
+            .payments
+            .periodSuccessfulAmountPaise,
+        300000,
+      );
+      expect(
+        scope.read(dashboardQueryProvider).filter,
+        DashboardDateFilter.thisMonth,
+      );
+    },
+  );
 }

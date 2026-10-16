@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/feedback_notice.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../data/member_failure.dart';
@@ -16,22 +17,12 @@ class MemberError extends StatelessWidget {
   final Object? error;
   final VoidCallback retry;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      children: [
-        Semantics(
-          liveRegion: true,
-          child: Text(
-            error is MemberFailure
-                ? (error as MemberFailure).message
-                : 'Member information could not be loaded. Please try again.',
-          ),
-        ),
-        const SizedBox(height: 12),
-        FilledButton(onPressed: retry, child: const Text('Retry')),
-      ],
-    ),
+  Widget build(BuildContext context) => FeedbackNotice(
+    message: error is MemberFailure
+        ? (error as MemberFailure).message
+        : 'Member information could not be loaded. Please try again.',
+    retry: retry,
+    primaryRetry: true,
   );
 }
 
@@ -57,16 +48,24 @@ class MemberContextChanged extends StatelessWidget {
 
 typedef MemberSection = ProfileSection;
 
-Widget membershipText(Membership membership) => Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Text(membership.planName),
-    Text(
-      'Plan snapshot: ${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)}',
-    ),
-    Text('${membership.startDate} to ${membership.endDate} (end exclusive)'),
-    Text(
-      'Status: ${membership.status} · ${membership.currentlyActive ? 'Current' : 'Not current'}',
-    ),
-  ],
+Widget membershipText(Membership membership) => Builder(
+  builder: (context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(membership.planName, style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 8),
+      Text(
+        'Plan snapshot: ${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)}',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      const SizedBox(height: 8),
+      Text(
+        '${membership.startDate} to ${membership.endDate} (end exclusive)',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      Text(
+        'Status: ${membership.status} · ${membership.currentlyActive ? 'Current' : 'Not current'}',
+      ),
+    ],
+  ),
 );

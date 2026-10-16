@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import 'auth_failure.dart';
@@ -89,6 +90,22 @@ class AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final error = err;
     final options = error.requestOptions;
+    // Authenticated image downloads use byte responses. Decode only JSON
+    // error envelopes so the existing refresh/scope/replay safeguards apply.
+    if (options.responseType == ResponseType.bytes &&
+        error.response?.data is List<int> &&
+        (error.response?.headers
+                .value('content-type')
+                ?.contains('application/json') ??
+            false)) {
+      try {
+        error.response!.data = jsonDecode(
+          utf8.decode(error.response!.data as List<int>),
+        );
+      } catch (_) {
+        // An invalid envelope cannot establish an authentication failure.
+      }
+    }
     final data = error.response?.data;
     final invalidSession =
         error.response?.statusCode == 401 &&

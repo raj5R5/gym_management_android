@@ -543,3 +543,10 @@ valid subscription, confirm check-in, inspect the open visit, confirm checkout,
 inspect completed duration, refresh/filter/page, and verify conflicts, overnight
 visits, token refresh, back, existing destinations and logout. Automated tests use
 synthetic fixtures/adapters and do not write real backend attendance records.
+
+## Optional member profile photos
+
+Camera/gallery selection, private preview recovery, authenticated uploads,
+replacement/removal, and shared initials fallbacks are documented in
+[Member profile photos](docs/member-photos.md). Cloudinary credentials belong
+only in the backend environment; the app has no provider secrets.

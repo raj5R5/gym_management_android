@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:gym_management_app/features/memberships/models/renewal_preview.dart';
 import 'package:gym_management_app/features/members/models/member_models.dart';
 import 'package:gym_management_app/features/memberships/data/membership_repository.dart';
 import 'package:gym_management_app/features/memberships/models/billing_models.dart';
@@ -59,14 +60,42 @@ BillingResult billingResult({
 Pagination pagination(int page, int total) =>
     Pagination.fromJson({'page': page, 'limit': 20, 'total': total});
 
+Map<String, dynamic> renewalPreviewJson() => {
+  'gymId': gymA,
+  'subscriptionId': subscriptionId,
+  'member': {
+    'id': memberId,
+    'firstName': 'Ada',
+    'lastName': 'Lovelace',
+    'memberCode': 'M001',
+  },
+  'planId': planId,
+  'previousEndDate': '2026-03-31',
+  'calendarTimezone': 'UTC',
+  'terms': {
+    'planName': 'Monthly',
+    'durationDays': 30,
+    'pricePaise': 150000,
+    'startDate': '2026-03-31',
+    'endDate': '2026-04-30',
+  },
+  'initialPaymentPaise': 0,
+  'outstandingBalancePaise': 150000,
+};
+
 class FakeMembershipRepository implements MembershipRepository {
   Object? failure;
+  Object? previewFailure;
+  Map<String, dynamic>? previewJson;
+  Completer<RenewalPreview>? previewGate;
+  final renewals = <RenewalPreview?>[];
   Map<String, dynamic>? savedPlan;
   final planWrites = <Map<String, dynamic>>[];
   bool empty = false;
   int total = 1;
   final operations = <String>[];
   final purchases = <PurchaseDraft>[];
+  final extraPlans = <Map<String, dynamic>>[];
   Completer<BillingResult>? writeGate;
   Completer<MembershipPlan>? planSaveGate;
   Completer<BillingPage<MembershipPlan>>? planGate;
@@ -88,6 +117,7 @@ class FakeMembershipRepository implements MembershipRepository {
                 ...(savedPlan == null ? planJson() : <String, dynamic>{}),
                 'gymId': gymId,
               }),
+              ...extraPlans.map(MembershipPlan.fromJson),
             ],
       pagination(page, empty ? 0 : total),
     );
@@ -148,7 +178,21 @@ class FakeMembershipRepository implements MembershipRepository {
     purchases.add(draft);
     _check();
     if (writeGate != null) return writeGate!.future;
-    return billingResult(payment: draft.payment);
+    final selected = [
+      ...extraPlans,
+      savedPlan ?? planJson(),
+    ].firstWhere((plan) => plan['id'] == draft.planId);
+    return BillingResult(
+      Membership.fromJson(
+        fullSubscription()..addAll({
+          'membershipPlanId': selected['id'],
+          'planNameSnapshot': selected['name'],
+          'durationDaysSnapshot': selected['durationDays'],
+          'pricePaiseSnapshot': selected['price'],
+        }),
+      ),
+      billingResult(payment: draft.payment).payment,
+    );
   }
 
   @override
@@ -160,22 +204,43 @@ class FakeMembershipRepository implements MembershipRepository {
   ) async {
     operations.add('cancel:$reason');
     _check();
+    if (writeGate != null) return writeGate!.future;
     return billingResult(cancelled: true);
+  }
+
+  @override
+  Future<RenewalPreview> renewalPreview(
+    String gymId,
+    String memberId,
+    String subscriptionId,
+  ) async {
+    operations.add('renewal-preview');
+    if (previewFailure != null) throw previewFailure!;
+    _check();
+    if (previewGate != null) return previewGate!.future;
+    return RenewalPreview.fromJson(previewJson ?? renewalPreviewJson());
   }
 
   @override
   Future<BillingResult> renew(
     String gymId,
     String memberId,
-    String subscriptionId,
-  ) async {
+    String subscriptionId, {
+    RenewalPreview? preview,
+  }) async {
     operations.add('renew');
+    renewals.add(preview);
     _check();
+    if (writeGate != null) return writeGate!.future;
     return billingResult(renewed: true);
   }
 }
 
 class ActiveMembershipMemberRepository extends FakeMemberRepository {
+  Completer<MembershipDetail>? detailGate;
+  Object? detailFailure;
+  int paidPaise = 303, balancePaise = 149697;
+  bool cancelled = false;
   @override
   Future<MembershipDetail> membership(
     String gymId,
@@ -184,11 +249,13 @@ class ActiveMembershipMemberRepository extends FakeMemberRepository {
   ) async {
     operations.add('membership:$subId');
     if (failure != null) throw failure!;
+    if (detailFailure != null) throw detailFailure!;
+    if (detailGate != null) return detailGate!.future;
     return MembershipDetail.fromJson({
-      'subscription': fullSubscription(),
+      'subscription': fullSubscription(cancelled: cancelled),
       'paymentSummary': {
-        'totalSuccessfulPaidPaise': 303,
-        'remainingBalancePaise': 149697,
+        'totalSuccessfulPaidPaise': paidPaise,
+        'remainingBalancePaise': balancePaise,
       },
     });
   }

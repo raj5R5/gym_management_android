@@ -453,8 +453,11 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Pat Lee'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('More'));
+      await tester.tap(find.byTooltip('Admin navigation'));
       await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'More'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Logout'));
       await tester.tap(find.text('Logout'));
       await tester.pumpAndSettle();
       expect(find.text('Sign in to your account'), findsOneWidget);

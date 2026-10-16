@@ -1,6 +1,9 @@
+import 'package:gym_management_app/features/members/photos/member_photo_providers.dart';
+import '../members/photo_fakes.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/app/app.dart';
@@ -9,15 +12,25 @@ import 'package:gym_management_app/app/router/app_routes.dart';
 import 'package:gym_management_app/core/config/app_config.dart';
 import 'package:gym_management_app/features/admin_dashboard/models/dashboard_models.dart';
 import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_providers.dart';
+import 'package:gym_management_app/features/admin_dashboard/presentation/circular_metric_card.dart';
+import 'package:gym_management_app/features/admin_dashboard/presentation/dashboard_date_range_dialog.dart';
+import 'package:gym_management_app/features/memberships/data/billing_failure.dart';
+import 'package:gym_management_app/features/memberships/models/billing_models.dart';
+import 'package:gym_management_app/app/theme/design_tokens.dart';
+import 'package:gym_management_app/features/memberships/providers/membership_providers.dart';
 import 'package:gym_management_app/features/auth/data/auth_failure.dart';
 import 'package:gym_management_app/features/auth/models/auth_models.dart';
 import 'package:gym_management_app/features/members/providers/member_providers.dart';
+import 'package:gym_management_app/features/members/providers/onboarding_providers.dart';
+import 'package:gym_management_app/features/members/data/pending_onboarding_store.dart';
 import 'package:gym_management_app/features/trainers/providers/trainer_providers.dart';
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/auth/providers/session_controller.dart';
 
 import '../auth/auth_fakes.dart';
 import '../members/member_fakes.dart';
+import '../members/onboarding_fakes.dart';
+import '../memberships/billing_fakes.dart';
 import '../trainers/trainer_fakes.dart';
 import 'dashboard_fakes.dart';
 
@@ -28,11 +41,28 @@ void main() {
     AuthRole role = AuthRole.admin,
     bool authenticated = true,
     List<String> gyms = const [gymA],
+    bool onboarding = false,
+    FakeMembershipRepository? plans,
   }) async {
     final api = FakeAuthApi()..identity = adminIdentity(gyms: gyms, role: role);
     final scope = ProviderContainer(
       overrides: [
-        appConfigProvider.overrideWithValue(AppConfig.fromValues()),
+        memberPhotoStoreProvider.overrideWithValue(MemoryMemberPhotoStore()),
+        appConfigProvider.overrideWithValue(
+          AppConfig.fromValues(apiBaseUrl: onboarding ? onboardingUrl : ''),
+        ),
+        if (onboarding) ...[
+          memberOnboardingRepositoryProvider.overrideWithValue(
+            FakeOnboardingRepository()
+              ..failure = StateError('No fresh submission'),
+          ),
+          pendingOnboardingStoreProvider.overrideWithValue(
+            SecurePendingOnboardingStore(
+              storage: TestOnboardingStorage(),
+              queue: OnboardingOperationQueue(),
+            ),
+          ),
+        ],
         authApiServiceProvider.overrideWithValue(api),
         credentialStorageProvider.overrideWithValue(
           FakeCredentialStorage()
@@ -44,6 +74,9 @@ void main() {
         ),
         memberRepositoryProvider.overrideWithValue(
           FakeMemberRepository()..empty = true,
+        ),
+        membershipRepositoryProvider.overrideWithValue(
+          plans ?? FakeMembershipRepository(),
         ),
       ],
     );
@@ -58,6 +91,38 @@ void main() {
     return scope;
   }
 
+  Future<void> reveal(WidgetTester tester, Finder finder) async {
+    if (finder.evaluate().isEmpty) {
+      await tester.scrollUntilVisible(
+        finder,
+        250,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+    }
+    await Scrollable.ensureVisible(tester.element(finder), alignment: .5);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> scrollToTop(WidgetTester tester) async {
+    tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(ListView).last,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position
+        .jumpTo(0);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
     'admin enters real dashboard shell with all-branch context and period',
     (tester) async {
@@ -69,15 +134,60 @@ void main() {
         AppRoutes.dashboard,
       );
       expect(find.byType(NavigationBar), findsOneWidget);
-      expect(find.text('Whole gym · All branches'), findsOneWidget);
+      expect(find.text('Whole gym · All branches'), findsNothing);
+      expect(find.text('Current gym · All branches'), findsOneWidget);
+      expect(find.text('Welcome back, Admin'), findsNothing);
+      expect(find.text('Your gym, at a glance.'), findsNothing);
       expect(find.byType(DropdownButtonFormField<String>), findsNothing);
-      expect(find.text('2026-03-01 to 2026-03-01 · Inclusive'), findsOneWidget);
+      expect(find.text('1 Mar 2026 · Inclusive'), findsOneWidget);
       expect(find.text('Gym timezone: Asia/Kolkata'), findsOneWidget);
       expect(repository.requests.single.gymId, gymA);
-      await tester.scrollUntilVisible(find.text('Successful revenue'), 250);
+      await tester.scrollUntilVisible(find.text('Total Revenue'), 250);
       expect(find.text('₹12,34,567.89'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('Checked in now'), 200);
-      expect(find.text('Checked in now'), findsOneWidget);
+      await reveal(tester, find.text('Active Plans'));
+      expect(find.byType(CircularMetricCard), findsNWidgets(4));
+      expect(find.byType(MetricRing), findsNWidgets(4));
+      final cards = tester
+          .widgetList<CircularMetricCard>(find.byType(CircularMetricCard))
+          .toList();
+      expect(cards.map((card) => card.color), [
+        AppPalette.ember,
+        const Color(0xFFA72F35),
+        const Color(0xFF355E9B),
+        const Color(0xFFB3472B),
+      ]);
+      expect(cards.first.layout, MetricCardLayout.revenueHero);
+      expect(
+        tester
+            .widget<MetricRing>(
+              find.descendant(
+                of: find.byWidget(cards.first),
+                matching: find.byType(MetricRing),
+              ),
+            )
+            .color,
+        AppPalette.darkEmber,
+      );
+      expect(cards[1].surfaceTint, const Color(0xFFFBE3DF));
+      expect(cards[1].iconBackground, const Color(0xFFFBE3DF));
+      final pendingRing = tester.widget<MetricRing>(
+        find.descendant(
+          of: find.byWidget(cards[1]),
+          matching: find.byType(MetricRing),
+        ),
+      );
+      expect(pendingRing.color, const Color(0xFFA72F35));
+      expect(
+        tester
+            .widget<Icon>(
+              find.descendant(
+                of: find.byWidget(cards[1]),
+                matching: find.byType(Icon),
+              ),
+            )
+            .color,
+        const Color(0xFFA72F35),
+      );
     },
   );
   testWidgets('admin login redirects to dashboard without manual navigation', (
@@ -115,21 +225,40 @@ void main() {
     (tester) async {
       final repository = FakeDashboardRepository()
         ..gate = Completer<GymDashboard>();
-      await pumpAdmin(tester, repository);
+      await pumpAdmin(
+        tester,
+        repository,
+        plans: FakeMembershipRepository()..empty = true,
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Loading your gym overview…'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
       repository.gate!.complete(
         GymDashboard.fromJson(dashboardJson(empty: true)),
       );
       await tester.pumpAndSettle();
+      await reveal(
+        tester,
+        find.text('No dashboard activity to show. All metrics are zero.'),
+      );
       expect(
         find.text('No dashboard activity to show. All metrics are zero.'),
         findsOneWidget,
       );
-      await tester.scrollUntilVisible(find.text('Successful revenue'), 250);
-      expect(find.text('₹0.00'), findsOneWidget);
+      await scrollToTop(tester);
+      await tester.scrollUntilVisible(find.text('Total Revenue'), 250);
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Total Revenue'),
+            matching: find.byType(CircularMetricCard),
+          ),
+          matching: find.text('₹0.00'),
+        ),
+        findsOneWidget,
+      );
     },
   );
   testWidgets('safe error supports retry and explicit refresh', (tester) async {
@@ -142,13 +271,246 @@ void main() {
       findsOneWidget,
     );
     repository.failure = null;
+    await reveal(tester, find.text('Retry dashboard'));
     await tester.tap(find.text('Retry dashboard'));
     await tester.pumpAndSettle();
     expect(repository.requests.length, 2);
+    await scrollToTop(tester);
     await tester.tap(find.byTooltip('Refresh dashboard'));
     await tester.pumpAndSettle();
     expect(repository.requests.length, 3);
   });
+  testWidgets(
+    'outstanding dues are separate from revenue and refresh from saved metrics',
+    (tester) async {
+      final repository = FakeDashboardRepository()
+        ..result = GymDashboard.fromJson(
+          dashboardJson(revenue: 100000, outstanding: 50000),
+        );
+      final plans = FakeMembershipRepository()..total = 2;
+      final scope = await pumpAdmin(
+        tester,
+        repository,
+        gyms: [gymA, gymB],
+        plans: plans,
+      );
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('₹1,000.00'), findsOneWidget);
+      await reveal(tester, find.text('Pending Amount'));
+      expect(find.text('₹500.00'), findsOneWidget);
+      expect(
+        tester
+            .widget<CircularMetricCard>(
+              find.ancestor(
+                of: find.text('Pending Amount'),
+                matching: find.byType(CircularMetricCard),
+              ),
+            )
+            .caption,
+        'Current membership dues',
+      );
+      repository.result = GymDashboard.fromJson(
+        dashboardJson(revenue: 125000, outstanding: 25000),
+      );
+      plans.total = 4;
+      await scrollToTop(tester);
+      await tester.tap(find.byTooltip('Refresh dashboard'));
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Pending Amount'));
+      expect(find.text('₹250.00'), findsOneWidget);
+      expect(find.text('₹500.00'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Active Plans'),
+            matching: find.byType(CircularMetricCard),
+          ),
+          matching: find.text('4'),
+        ),
+        findsOneWidget,
+      );
+      repository.result = GymDashboard.fromJson(
+        dashboardJson(revenue: 0, outstanding: 75000),
+      );
+      scope.read(adminGymProvider.notifier).selectGym(gymB);
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Pending Amount'));
+      expect(find.text('₹750.00'), findsOneWidget);
+      expect(repository.requests.last.gymId, gymB);
+    },
+  );
+
+  testWidgets(
+    'gym-local today stays zero while historical selection shows its successful revenue',
+    (tester) async {
+      Map<String, dynamic> response(String day, int revenue, int payments) {
+        final json = dashboardJson(revenue: revenue, outstanding: 50000);
+        json['period'] = {
+          'timezone': 'Asia/Kolkata',
+          'from': '2026-10-$day',
+          'to': '2026-10-$day',
+          'startUtc': day == '12'
+              ? '2026-10-11T18:30:00.000Z'
+              : '2026-10-09T18:30:00.000Z',
+          'endUtc': day == '12'
+              ? '2026-10-12T18:30:00.000Z'
+              : '2026-10-10T18:30:00.000Z',
+          'branchId': null,
+        };
+        (json['payments'] as Map)['periodSuccessfulCount'] = payments;
+        return json;
+      }
+
+      final repository = FakeDashboardRepository()
+        ..result = GymDashboard.fromJson(response('12', 0, 0));
+      final scope = await pumpAdmin(tester, repository);
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('TODAY · 12 OCT 2026'), findsOneWidget);
+      expect(find.text('₹0.00'), findsOneWidget);
+      expect(find.text('No payments during this period'), findsOneWidget);
+      expect(find.text('₹500.00'), findsOneWidget);
+      repository.result = GymDashboard.fromJson(response('10', 100000, 1));
+      scope
+          .read(dashboardQueryProvider.notifier)
+          .selectRange(CalendarDate(2026, 10, 10), CalendarDate(2026, 10, 10));
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('10 OCT 2026'), findsOneWidget);
+      expect(find.text('₹1,000.00'), findsOneWidget);
+      expect(find.text('No payments during this period'), findsNothing);
+      expect(find.text('₹500.00'), findsOneWidget);
+      expect(repository.requests.last.query.toParameters(), {
+        'from': '2026-10-10',
+        'to': '2026-10-10',
+      });
+      repository.result = GymDashboard.fromJson(response('12', 0, 0));
+      scope.read(dashboardQueryProvider.notifier).useGymToday();
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('TODAY · 12 OCT 2026'), findsOneWidget);
+      expect(find.text('₹0.00'), findsOneWidget);
+      expect(find.text('₹1,000.00'), findsNothing);
+      expect(find.text('No payments during this period'), findsOneWidget);
+      expect(repository.requests.last.query.toParameters(), isEmpty);
+    },
+  );
+
+  testWidgets(
+    'quick filters are server presets; repeated selected tap makes no duplicate call',
+    (tester) async {
+      final repository = FakeDashboardRepository();
+      final scope = await pumpAdmin(tester, repository);
+      await tester.pumpAndSettle();
+      final sevenDays = dashboardJson();
+      (sevenDays['period'] as Map)
+        ..['to'] = '2026-03-07'
+        ..['endUtc'] = '2026-03-07T18:30:00.000Z';
+      repository.result = GymDashboard.fromJson(sevenDays);
+      await tester.tap(find.text('7 days'));
+      await tester.pumpAndSettle();
+      expect(repository.requests.last.query.toParameters(), {
+        'preset': 'last7Days',
+      });
+      expect(
+        scope.read(dashboardQueryProvider).filter,
+        DashboardDateFilter.last7Days,
+      );
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '7 days'))
+            .selected,
+        isTrue,
+      );
+      expect(find.text('1 Mar 2026 – 7 Mar 2026 · Inclusive'), findsOneWidget);
+      final requests = repository.requests.length;
+      await tester.tap(find.text('7 days'));
+      await tester.pumpAndSettle();
+      expect(repository.requests.length, requests);
+      final month = dashboardJson();
+      (month['period'] as Map)
+        ..['to'] = '2026-03-31'
+        ..['endUtc'] = '2026-03-31T18:30:00.000Z';
+      repository.result = GymDashboard.fromJson(month);
+      await tester.tap(find.text('This month'));
+      await tester.pumpAndSettle();
+      expect(repository.requests.last.query.toParameters(), {
+        'preset': 'thisMonth',
+      });
+      expect(find.text('THIS MONTH · MARCH 2026'), findsOneWidget);
+      repository.result = GymDashboard.fromJson(dashboardJson());
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+      expect(repository.requests.last.query.toParameters(), isEmpty);
+      await tester.tap(find.text('Custom range'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(
+        scope.read(dashboardQueryProvider).filter,
+        DashboardDateFilter.today,
+      );
+      expect(repository.requests.length, requests + 2);
+    },
+  );
+
+  testWidgets(
+    'failed refresh keeps same-scope values; a gym change clears the old display',
+    (tester) async {
+      final repository = FakeDashboardRepository();
+      final scope = await pumpAdmin(tester, repository, gyms: [gymA, gymB]);
+      await tester.pumpAndSettle();
+      repository.gate = Completer<GymDashboard>();
+      await tester.tap(find.byTooltip('Refresh dashboard'));
+      await tester.pump();
+      expect(find.text('Updating your gym overview…'), findsOneWidget);
+      expect(find.text('₹12,34,567.89'), findsOneWidget);
+      repository.gate!.completeError(
+        const AuthFailure(AuthFailureKind.network),
+      );
+      repository.gate = null;
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Refresh failed · Showing last successful data'),
+        findsOneWidget,
+      );
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('₹12,34,567.89'), findsOneWidget);
+      expect(find.text('₹500.00'), findsOneWidget);
+      repository.gate = Completer<GymDashboard>();
+      scope.read(adminGymProvider.notifier).selectGym(gymB);
+      await tester.pump();
+      expect(find.text('₹12,34,567.89'), findsNothing);
+      repository.gate!.complete(
+        GymDashboard.fromJson(dashboardJson(empty: true)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('₹12,34,567.89'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'access denial clears retained metrics instead of presenting stale authorized data',
+    (tester) async {
+      final repository = FakeDashboardRepository();
+      await pumpAdmin(tester, repository);
+      await tester.pumpAndSettle();
+      expect(find.text('₹12,34,567.89'), findsOneWidget);
+      repository.failure = const AuthFailure(AuthFailureKind.forbidden);
+      await tester.tap(find.byTooltip('Refresh dashboard'));
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('₹12,34,567.89'), findsNothing);
+      expect(find.text('₹500.00'), findsNothing);
+      expect(
+        find.text('Refresh failed · Showing last successful data'),
+        findsNothing,
+      );
+      await scrollToTop(tester);
+      expect(find.text('This action is not permitted.'), findsOneWidget);
+    },
+  );
   testWidgets('member/trainer sections, back to dashboard, more/logout', (
     tester,
   ) async {
@@ -169,9 +531,12 @@ void main() {
       find.text('No trainers yet. Add your first trainer.'),
       findsOneWidget,
     );
-    await tester.tap(find.text('More'));
+    await tester.tap(find.byTooltip('Admin navigation'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
     expect(find.byType(AppBar), findsOneWidget);
+    await tester.ensureVisible(find.text('Logout'));
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
     expect(find.text('Sign in to your account'), findsOneWidget);
@@ -234,14 +599,169 @@ void main() {
   testWidgets('date picker opens without a branch selector', (tester) async {
     await pumpAdmin(tester, FakeDashboardRepository());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Select period'));
+    await tester.tap(find.text('Custom range'));
     await tester.pumpAndSettle();
-    expect(find.byType(DateRangePickerDialog), findsOneWidget);
+    expect(find.byType(DashboardDateRangeDialog), findsOneWidget);
+    expect(find.text('Both dates included · Up to 366 days'), findsOneWidget);
+  });
+  testWidgets('date selection and gym-local today preserve request semantics', (
+    tester,
+  ) async {
+    final repository = FakeDashboardRepository();
+    final scope = await pumpAdmin(tester, repository);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom range'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-03-01')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-03-07')));
+    await tester.pump();
+    final json = dashboardJson();
+    (json['period'] as Map<String, dynamic>)
+      ..['to'] = '2026-03-07'
+      ..['endUtc'] = '2026-03-07T18:30:00.000Z';
+    repository.result = GymDashboard.fromJson(json);
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(repository.requests.length, 2);
+    expect(repository.requests.last.query.toParameters(), {
+      'from': '2026-03-01',
+      'to': '2026-03-07',
+    });
+    expect(find.text('1 Mar 2026 – 7 Mar 2026 · Inclusive'), findsOneWidget);
+    repository.result = GymDashboard.fromJson(dashboardJson());
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+    expect(repository.requests.length, 3);
+    expect(repository.requests.last.query.toParameters(), isEmpty);
+    expect(scope.read(dashboardQueryProvider).from, isNull);
+  });
+  testWidgets('invalid date range does not send a dashboard request', (
+    tester,
+  ) async {
+    final repository = FakeDashboardRepository();
+    await pumpAdmin(tester, repository);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Custom range'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-03-07')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('calendar-day-2026-03-01')));
+    await tester.pump();
     expect(
-      find.text('Select period (up to 366 inclusive days)'),
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Apply'))
+          .onPressed,
+      isNull,
+    );
+    await tester.pumpAndSettle();
+    expect(repository.requests.length, 1);
+    expect(find.text('From must be on or before To.'), findsOneWidget);
+  });
+  testWidgets(
+    'pull refresh reloads the selected period without changing filters',
+    (tester) async {
+      final repository = FakeDashboardRepository();
+      final scope = await pumpAdmin(tester, repository);
+      await tester.pumpAndSettle();
+      scope
+          .read(dashboardQueryProvider.notifier)
+          .selectRange(CalendarDate(2026, 3, 1), CalendarDate(2026, 3, 7));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const Key('dashboard-period')),
+        const Offset(0, 400),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.requests.length, 3);
+      expect(repository.requests.last.query.toParameters(), {
+        'from': '2026-03-01',
+        'to': '2026-03-07',
+      });
+    },
+  );
+  for (final action in {
+    'Add member': '${AppRoutes.members}/new',
+    'View members': AppRoutes.members,
+    'View trainers': AppRoutes.trainers,
+    'Membership plans': AppRoutes.plans,
+  }.entries) {
+    testWidgets('quick action ${action.key} opens the existing route', (
+      tester,
+    ) async {
+      final scope = await pumpAdmin(
+        tester,
+        FakeDashboardRepository(),
+        onboarding: action.key == 'Add member',
+      );
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text(action.key));
+      await tester.tap(find.text(action.key));
+      await tester.pumpAndSettle();
+      expect(scope.read(appRouterProvider).state.uri.path, action.value);
+      if (action.key == 'Add member') {
+        expect(
+          scope.read(appRouterProvider).state.uri.queryParameters['gymId'],
+          gymA,
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-step-title')),
+          findsOneWidget,
+        );
+      }
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(scope.read(appRouterProvider).state.uri.path, AppRoutes.dashboard);
+    });
+  }
+  testWidgets('unknown errors display only the safe dashboard fallback', (
+    tester,
+  ) async {
+    await pumpAdmin(
+      tester,
+      FakeDashboardRepository()..failure = Exception('internal-server-detail'),
+    );
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('Retry dashboard'));
+    expect(
+      find.text('Dashboard could not be loaded. Please try again.'),
       findsOneWidget,
     );
+    expect(find.textContaining('internal-server-detail'), findsNothing);
   });
+  testWidgets(
+    'dark dashboard fits 320px with double text scaling and exact money',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      final repository = FakeDashboardRepository()
+        ..result = GymDashboard.fromJson(
+          dashboardJson(revenue: 9007199254740991),
+        );
+      await pumpAdmin(tester, repository);
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Total Revenue'));
+      expect(find.text('₹9,00,71,99,25,47,409.91'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(CircularMetricCard),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsNothing,
+      );
+      await reveal(tester, find.text('Pending Amount'));
+      expect(find.text('₹500.00'), findsOneWidget);
+      await reveal(tester, find.text('Active Plans'));
+      await reveal(tester, find.text('Add member'));
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('dashboard works at 320px width and larger text', (tester) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
@@ -251,7 +771,253 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await pumpAdmin(tester, FakeDashboardRepository());
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Successful revenue'), 250);
+    await tester.scrollUntilVisible(find.text('Total Revenue'), 250);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('revenue hero and three compact cards show exact values', (
+    tester,
+  ) async {
+    final plans = FakeMembershipRepository()..total = 37;
+    await pumpAdmin(tester, FakeDashboardRepository(), plans: plans);
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('Active Plans'));
+    final expected = {
+      'Total Revenue': '₹12,34,567.89',
+      'Pending Amount': '₹500.00',
+      'Total Members': '12',
+      'Active Plans': '37',
+    };
+    for (final entry in expected.entries) {
+      final card = find.ancestor(
+        of: find.text(entry.key),
+        matching: find.byType(CircularMetricCard),
+      );
+      expect(card, findsOneWidget);
+      expect(
+        find.descendant(of: card, matching: find.text(entry.value)),
+        findsOneWidget,
+      );
+    }
+    final rings = tester
+        .widgetList<MetricRing>(find.byType(MetricRing))
+        .toList();
+    expect(rings.map((ring) => ring.color), [
+      AppPalette.darkEmber,
+      DashboardAccents.pending,
+      DashboardAccents.members,
+      DashboardAccents.plans,
+    ]);
+    final revenue = find.ancestor(
+      of: find.text('Total Revenue'),
+      matching: find.byType(CircularMetricCard),
+    );
+    final pending = find.ancestor(
+      of: find.text('Pending Amount'),
+      matching: find.byType(CircularMetricCard),
+    );
+    expect(
+      tester.getTopLeft(revenue).dy,
+      lessThan(tester.getTopLeft(pending).dy),
+    );
+    expect(
+      tester.getSize(revenue).width,
+      greaterThan(tester.getSize(pending).width),
+    );
+    expect(plans.operations, ['plans:$gymA:1']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'plan failure preserves financial metrics and offers an independent retry',
+    (tester) async {
+      final plans = FakeMembershipRepository()
+        ..failure = const BillingFailure('Plans unavailable.');
+      final repository = FakeDashboardRepository();
+      await pumpAdmin(tester, repository, plans: plans);
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Retry plans'));
+      expect(find.text('Plans unavailable.'), findsOneWidget);
+      expect(find.text('₹500.00'), findsOneWidget);
+      plans.failure = null;
+      plans.total = 6;
+      await tester.tap(find.text('Retry plans'));
+      await tester.pumpAndSettle();
+      expect(find.text('6'), findsOneWidget);
+      expect(repository.requests, hasLength(1));
+      expect(plans.operations, ['plans:$gymA:1', 'plans:$gymA:1']);
+    },
+  );
+
+  testWidgets(
+    'plan count loading remains a placeholder alongside real dashboard metrics',
+    (tester) async {
+      final plans = FakeMembershipRepository()
+        ..planGate = Completer<BillingPage<MembershipPlan>>();
+      await pumpAdmin(tester, FakeDashboardRepository(), plans: plans);
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Active Plans'));
+      final card = find.ancestor(
+        of: find.text('Active Plans'),
+        matching: find.byType(CircularMetricCard),
+      );
+      expect(
+        find.descendant(of: card, matching: find.text('—')),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: card, matching: find.text('0')), findsNothing);
+      expect(find.text('₹500.00'), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      plans.planGate!.complete(
+        BillingPage([MembershipPlan.fromJson(planJson())], pagination(1, 37)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: card, matching: find.text('37')),
+        findsOneWidget,
+      );
+      expect(plans.operations, ['plans:$gymA:1']);
+    },
+  );
+  testWidgets(
+    'narrow enlarged-text shell keeps all destinations accessible without broken labels',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpAdmin(tester, FakeDashboardRepository());
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).labelBehavior,
+        NavigationDestinationLabelBehavior.alwaysShow,
+      );
+      expect(
+        tester
+            .widgetList<NavigationDestination>(
+              find.byType(NavigationDestination),
+            )
+            .map((d) => d.label),
+        ['Dashboard', 'Members', 'Trainers', 'Plans'],
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final size in [const Size(360, 740), const Size(393, 820)]) {
+      testWidgets('summary fits before scrolling at $size in $brightness', (
+        tester,
+      ) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        tester.view.padding = FakeViewPadding(top: 24, bottom: 24);
+        tester.platformDispatcher.platformBrightnessTestValue = brightness;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        await pumpAdmin(tester, FakeDashboardRepository());
+        await tester.pumpAndSettle();
+        final bar = tester.getRect(find.byType(NavigationBar));
+        final cards = find.byType(CircularMetricCard);
+        expect(cards, findsNWidgets(4));
+        final metrics = [
+          for (var i = 1; i < 4; i++) tester.getRect(cards.at(i)),
+        ];
+        expect(metrics.map((r) => r.top).toSet(), hasLength(1));
+        expect(metrics.map((r) => r.height).toSet(), hasLength(1));
+        for (final rect in metrics) {
+          expect(rect.bottom, lessThan(bar.top));
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(size.width));
+        }
+        expect(tester.getRect(cards.first).bottom, lessThan(metrics.first.top));
+        expect(find.byType(MetricRing), findsNWidgets(4));
+        expect(
+          find.byKey(const Key('dashboard-period')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Gym timezone: Asia/Kolkata').hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final scale in [1.0, 1.3, 2.0]) {
+    testWidgets(
+      'four evenly spaced single-line tabs at 320dp and $scale text',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 740);
+        tester.view.devicePixelRatio = 1;
+        tester.view.padding = FakeViewPadding(bottom: 24);
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await pumpAdmin(tester, FakeDashboardRepository());
+        await tester.pumpAndSettle();
+        final bar = find.byType(NavigationBar);
+        final destinations = find.byType(NavigationDestination);
+        for (var i = 0; i < 4; i++) {
+          final destination = destinations.at(i);
+          final rect = tester.getRect(destination);
+          expect(rect.width, closeTo(80, .1));
+          expect(rect.height, greaterThanOrEqualTo(48));
+          final text = find.descendant(
+            of: destination,
+            matching: find.byType(Text),
+          );
+          final paragraph = tester.renderObject<RenderParagraph>(text);
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(
+              baseOffset: 0,
+              extentOffset: paragraph.text.toPlainText().length,
+            ),
+          );
+          expect(boxes.map((b) => b.top).toSet(), hasLength(1));
+          expect(tester.getRect(text).left, greaterThanOrEqualTo(rect.left));
+          expect(tester.getRect(text).right, lessThanOrEqualTo(rect.right));
+          expect(text.hitTestable(), findsOneWidget);
+          expect(rect.bottom, lessThanOrEqualTo(740 - 24));
+        }
+        expect(
+          tester.widget<NavigationBar>(bar).labelBehavior,
+          NavigationDestinationLabelBehavior.alwaysShow,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'drawer-only More returns to its previous tab with Android Back',
+    (tester) async {
+      final scope = await pumpAdmin(tester, FakeDashboardRepository());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(NavigationDestination).at(3));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Admin navigation'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ListTile, 'More'));
+      await tester.pumpAndSettle();
+      expect(scope.read(appRouterProvider).state.uri.path, AppRoutes.more);
+      expect(find.byType(NavigationBar), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(
+        scope.read(appRouterProvider).routeInformationProvider.value.uri.path,
+        AppRoutes.plans,
+      );
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        3,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

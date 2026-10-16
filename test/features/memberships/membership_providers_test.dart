@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:gym_management_app/features/members/models/member_models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_providers.dart';
+import 'package:gym_management_app/features/admin_dashboard/models/dashboard_models.dart';
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/auth/providers/session_controller.dart';
 import 'package:gym_management_app/features/members/providers/member_providers.dart';
@@ -13,14 +15,19 @@ import '../admin_dashboard/dashboard_fakes.dart';
 import '../members/member_fakes.dart';
 import 'billing_fakes.dart';
 import 'package:gym_management_app/features/memberships/providers/plan_providers.dart';
+import 'package:gym_management_app/features/memberships/providers/payment_providers.dart';
 
 void main() {
   late ProviderContainer container;
   late FakeMembershipRepository billing;
   late FakeMemberRepository members;
+  late FakeDashboardRepository dashboard;
   setUp(() {
     billing = FakeMembershipRepository();
-    members = FakeMemberRepository()..populated = true;
+    members = FakeMemberRepository()
+      ..populated = true
+      ..historyRecords = expiredHistoryFixture();
+    dashboard = FakeDashboardRepository();
     container = ProviderContainer(
       overrides: [
         authApiServiceProvider.overrideWithValue(
@@ -29,9 +36,7 @@ void main() {
         credentialStorageProvider.overrideWithValue(FakeCredentialStorage()),
         memberRepositoryProvider.overrideWithValue(members),
         membershipRepositoryProvider.overrideWithValue(billing),
-        dashboardRepositoryProvider.overrideWithValue(
-          FakeDashboardRepository(),
-        ),
+        dashboardRepositoryProvider.overrideWithValue(dashboard),
       ],
     );
   });
@@ -40,6 +45,44 @@ void main() {
       .read(sessionControllerProvider.notifier)
       .login(email: 'person@example.invalid', password: syntheticCredential());
   MemberScope scope() => scopeFor(container.read(adminGymProvider)!, memberId);
+  for (final operation in ['purchase', 'cancel', 'renew']) {
+    test(
+      '$operation refreshes outstanding dues with the selected date filter',
+      () async {
+        await login();
+        container.listen(dashboardProvider, (_, _) {});
+        container
+            .read(dashboardQueryProvider.notifier)
+            .selectRange(CalendarDate(2026, 3, 1), CalendarDate(2026, 3, 7));
+        await container.read(dashboardProvider.future);
+        final before = dashboard.requests.length;
+        dashboard.result = GymDashboard.fromJson(
+          dashboardJson(outstanding: 25000),
+        );
+        final controller = container.read(
+          billingMutationProvider(scope()).notifier,
+        );
+        final result = await switch (operation) {
+          'purchase' => controller.purchase(PurchaseDraft(planId: planId)),
+          'cancel' => controller.cancel(subscriptionId, 'Requested'),
+          _ => controller.renew(subscriptionId),
+        };
+        expect(result, isNotNull);
+        expect(
+          (await container.read(
+            dashboardProvider.future,
+          ))!.payments.outstandingAmountPaise,
+          25000,
+        );
+        expect(dashboard.requests.length, before + 1);
+        expect(dashboard.requests.last.gymId, gymA);
+        expect(dashboard.requests.last.query.toParameters(), {
+          'from': '2026-03-01',
+          'to': '2026-03-07',
+        });
+      },
+    );
+  }
   test(
     'unauthenticated and foreign scope reads do not reach repository',
     () async {
@@ -59,6 +102,78 @@ void main() {
         isNull,
       );
       expect(billing.operations, isEmpty);
+    },
+  );
+
+  for (final operation in ['purchase', 'renew']) {
+    test(
+      '$operation rechecks paginated server lifecycle and blocks paid/unpaid active memberships',
+      () async {
+        await login();
+        members.historyRecords = [
+          for (var index = 0; index < 20; index++)
+            subscriptionJson()..addAll({
+              'id': (100 + index).toRadixString(16).padLeft(24, '0'),
+              'status': 'expired',
+              'isCurrentlyActive': false,
+            }),
+          subscriptionJson()..addAll({'isCurrentlyActive': false}),
+        ];
+        final controller = container.read(
+          billingMutationProvider(scope()).notifier,
+        );
+        final result = operation == 'purchase'
+            ? await controller.purchase(PurchaseDraft(planId: planId))
+            : await controller.renew(subscriptionId);
+        expect(result, isNull);
+        expect(billing.purchases, isEmpty);
+        expect(billing.renewals, isEmpty);
+        expect(members.operations, contains('history:2'));
+        final error =
+            container.read(billingMutationProvider(scope())).error
+                as BillingFailure;
+        expect(error.message, contains('unexpired membership'));
+        expect(error.uncertain, false);
+      },
+    );
+    test(
+      '$operation allowed for expired unpaid history and cancelled records',
+      () async {
+        await login();
+        members.historyRecords = [
+          ...expiredHistoryFixture(),
+          subscriptionJson(cancelled: true),
+        ];
+        final controller = container.read(
+          billingMutationProvider(scope()).notifier,
+        );
+        final result = operation == 'purchase'
+            ? await controller.purchase(PurchaseDraft(planId: planId))
+            : await controller.renew(subscriptionId);
+        expect(result, isNotNull);
+      },
+    );
+  }
+  test(
+    'scope change during fresh eligibility read makes no membership write',
+    () async {
+      await login();
+      members.historyGate = Completer<MembershipHistory>();
+      final controller = container.read(
+        billingMutationProvider(scope()).notifier,
+      );
+      final pending = controller.purchase(PurchaseDraft(planId: planId));
+      await Future<void>.delayed(Duration.zero);
+      container.read(adminGymProvider.notifier).selectGym(gymB);
+      members.historyGate!.complete(
+        MembershipHistory.fromResponse(historyJson(), {
+          'page': 1,
+          'limit': 20,
+          'total': 0,
+        }),
+      );
+      expect(await pending, isNull);
+      expect(billing.purchases, isEmpty);
     },
   );
   test('plans loading then typed success', () async {
@@ -384,6 +499,82 @@ void main() {
       await login();
       billing.planSaveGate!.complete(MembershipPlan.fromJson(planJson()));
       expect(await pending, isNull);
+    },
+  );
+  test(
+    'confirmed cancellation refreshes members, details, histories, dues and dashboard without resetting filters',
+    () async {
+      await login();
+      final current = scope();
+      final history = (scope: current, page: 1);
+      final detail = (scope: current, subscriptionId: subscriptionId);
+      container.read(memberQueryProvider.notifier).apply(search: 'Alex');
+      container.listen(membersProvider, (_, _) {});
+      container.listen(memberSummaryProvider(current), (_, _) {});
+      container.listen(memberHistoryProvider(history), (_, _) {});
+      container.listen(membershipDetailProvider(detail), (_, _) {});
+      container.listen(paymentHistoryProvider(history), (_, _) {});
+      container.listen(outstandingDuesProvider, (_, _) {});
+      container.listen(dashboardProvider, (_, _) {});
+      await Future.wait([
+        container.read(membersProvider.future),
+        container.read(memberSummaryProvider(current).future),
+        container.read(memberHistoryProvider(history).future),
+        container.read(membershipDetailProvider(detail).future),
+        container.read(paymentHistoryProvider(history).future),
+        container.read(outstandingDuesProvider.future),
+        container.read(dashboardProvider.future),
+      ]);
+      final lists = members.listCalls.length;
+      final details = members.operations
+          .where((e) => e.startsWith('membership:'))
+          .length;
+      final histories = members.operations
+          .where((e) => e.startsWith('history:'))
+          .length;
+      final summaries = members.operations
+          .where((e) => e.startsWith('summary:'))
+          .length;
+      final payments = billing.operations
+          .where((e) => e.startsWith('payments:'))
+          .length;
+      final dashboards = dashboard.requests.length;
+      final result = await container
+          .read(billingMutationProvider(current).notifier)
+          .cancel(subscriptionId, 'Requested');
+      expect(result!.subscription.status, 'cancelled');
+      await Future.wait([
+        container.read(membersProvider.future),
+        container.read(memberSummaryProvider(current).future),
+        container.read(memberHistoryProvider(history).future),
+        container.read(membershipDetailProvider(detail).future),
+        container.read(paymentHistoryProvider(history).future),
+        container.read(outstandingDuesProvider.future),
+        container.read(dashboardProvider.future),
+      ]);
+      expect(members.listCalls.length, greaterThan(lists));
+      expect(
+        members.operations.where((e) => e.startsWith('membership:')).length,
+        greaterThan(details),
+      );
+      expect(
+        members.operations.where((e) => e.startsWith('history:')).length,
+        greaterThan(histories),
+      );
+      expect(
+        members.operations.where((e) => e.startsWith('summary:')).length,
+        greaterThan(summaries),
+      );
+      expect(
+        billing.operations.where((e) => e.startsWith('payments:')).length,
+        greaterThan(payments),
+      );
+      expect(dashboard.requests.length, greaterThan(dashboards));
+      expect(container.read(memberQueryProvider).search, 'Alex');
+      expect(
+        billing.operations.where((e) => e.startsWith('cancel:')).toList(),
+        ['cancel:Requested'],
+      );
     },
   );
 }

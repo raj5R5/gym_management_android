@@ -17,6 +17,7 @@ void main() {
     expect(result.subscriptions.expired, 4);
     expect(result.payments.periodSuccessfulAmountPaise, 123456789);
     expect(result.payments.periodSuccessfulCount, 5);
+    expect(result.payments.outstandingAmountPaise, 50000);
     expect(result.attendance.periodVisits, 20);
     expect(result.attendance.periodUniqueMembers, 10);
     expect(result.attendance.currentlyCheckedIn, 2);
@@ -29,6 +30,21 @@ void main() {
   test('all zero metrics are a valid empty response', () {
     expect(GymDashboard.fromJson(dashboardJson(empty: true)).isEmpty, isTrue);
   });
+  test('unpaid dues alone prevent a misleading empty dashboard', () {
+    final json = dashboardJson(empty: true);
+    (json['payments'] as Map)['outstandingAmountPaise'] = 50000;
+    final result = GymDashboard.fromJson(json);
+    expect(result.payments.periodSuccessfulAmountPaise, 0);
+    expect(result.isEmpty, isFalse);
+  });
+  for (final value in [-1, 1.5, '50000', null, 9007199254740992]) {
+    test('rejects invalid outstanding paise $value', () {
+      final json = dashboardJson();
+      json['payments'] = Map<String, dynamic>.from(json['payments'] as Map)
+        ..['outstandingAmountPaise'] = value;
+      expect(() => GymDashboard.fromJson(json), throwsFormatException);
+    });
+  }
   for (final value in [-1, 1.5, '123', null, 9007199254740992]) {
     test('rejects invalid money/count $value', () {
       final json = dashboardJson();

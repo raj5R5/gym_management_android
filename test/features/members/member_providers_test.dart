@@ -130,6 +130,131 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(container.read(membersProvider).asData!.value!.members, isEmpty);
   });
+  test(
+    'gender filter scans later server pages before paginating matches',
+    () async {
+      await login();
+      final data = GenderMemberRepository();
+      final provider = ProviderContainer(
+        overrides: [
+          memberRepositoryProvider.overrideWithValue(data),
+          authApiServiceProvider.overrideWithValue(api),
+          credentialStorageProvider.overrideWithValue(FakeCredentialStorage()),
+          dashboardRepositoryProvider.overrideWithValue(
+            FakeDashboardRepository(),
+          ),
+        ],
+      );
+      await provider
+          .read(sessionControllerProvider.notifier)
+          .login(
+            email: 'person@example.invalid',
+            password: syntheticCredential(),
+          );
+      addTearDown(provider.dispose);
+      provider
+          .read(memberQueryProvider.notifier)
+          .apply(search: '', gender: 'male');
+      final first = (await provider.read(membersProvider.future))!;
+      expect(first.pagination.total, 42);
+      expect(first.members, hasLength(20));
+      expect(first.members.every((member) => member.gender == 'male'), true);
+      expect(data.listCalls.map((call) => call.query.page), [1, 2]);
+      expect(
+        data.listCalls.every(
+          (call) =>
+              !call.query.toParameters().containsKey('gender') &&
+              call.query.status == null,
+        ),
+        true,
+      );
+      provider.read(memberQueryProvider.notifier).page(3);
+      final last = (await provider.read(membersProvider.future))!;
+      expect(last.members.map((member) => member.firstName), [
+        'Person 120',
+        'Person 123',
+      ]);
+      expect(last.pagination.page, 3);
+      expect(last.pagination.hasNext, false);
+      provider
+          .read(memberQueryProvider.notifier)
+          .apply(search: '', gender: 'female');
+      final female = (await provider.read(membersProvider.future))!;
+      expect(female.members.every((member) => member.gender == 'female'), true);
+      expect(female.pagination.total, 42);
+      expect(female.pagination.page, 1);
+      provider
+          .read(memberQueryProvider.notifier)
+          .apply(search: 'Person 124', gender: 'female');
+      final search = (await provider.read(membersProvider.future))!;
+      expect(search.members.single.firstName, 'Person 124');
+      provider.read(memberQueryProvider.notifier).apply(search: '');
+      final all = (await provider.read(membersProvider.future))!;
+      expect(all.pagination.total, 125);
+      expect(all.members.any((member) => member.gender == null), true);
+      expect(data.listCalls.last.query.limit, 20);
+    },
+  );
+  test(
+    'gender filtering errors never show a partially scanned total',
+    () async {
+      await login();
+      repository.delayLists = true;
+      container
+          .read(memberQueryProvider.notifier)
+          .apply(search: '', gender: 'male');
+      final future = container.read(membersProvider.future);
+      await Future<void>.delayed(Duration.zero);
+      repository.pendingLists.first.complete(
+        MembersPage([
+          MemberProfile.fromJson({...profileJson(), 'gender': 'male'}),
+        ], Pagination.fromJson({'page': 1, 'limit': 100, 'total': 101})),
+      );
+      await Future<void>.delayed(Duration.zero);
+      repository.pendingLists.last.completeError(
+        const MemberFailure('Offline'),
+      );
+      await expectLater(future, throwsA(isA<MemberFailure>()));
+      expect(container.read(membersProvider).hasError, true);
+      expect(container.read(membersProvider).asData, isNull);
+    },
+  );
+  test(
+    'scope change stops an in-flight gender scan before next server page',
+    () async {
+      await login();
+      repository.delayLists = true;
+      container
+          .read(memberQueryProvider.notifier)
+          .apply(search: '', gender: 'male');
+      container.listen(membersProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      final old = repository.pendingLists.single;
+      container.read(adminGymProvider.notifier).selectGym(gymB);
+      final current = container.read(membersProvider.future);
+      await Future<void>.delayed(Duration.zero);
+      repository.pendingLists.last.complete(
+        MembersPage(
+          [],
+          Pagination.fromJson({'page': 1, 'limit': 20, 'total': 0}),
+        ),
+      );
+      await current;
+      old.complete(
+        MembersPage(
+          [],
+          Pagination.fromJson({'page': 1, 'limit': 100, 'total': 101}),
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        repository.listCalls.where((call) => call.gymId == gymA),
+        hasLength(1),
+      );
+      expect(container.read(memberQueryProvider).gender, isNull);
+      expect(container.read(membersProvider).asData!.value!.members, isEmpty);
+    },
+  );
   test('summary/profile/history/membership reads use current scope', () async {
     await login();
     final current = scope();

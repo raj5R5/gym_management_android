@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,6 +81,31 @@ void main() {
       await client.get<Object?>('protected');
       expect(requests, 2);
       expect(api.refreshCalls, 1);
+    },
+  );
+  test(
+    'protected photo bytes decode expired JSON and refresh before a safe GET retry',
+    () async {
+      var requests = 0;
+      client.httpClientAdapter = CallbackAdapter((_) {
+        requests++;
+        if (requests == 1) return expired();
+        return ResponseBody.fromBytes(
+          Uint8List.fromList([255, 216, 255]),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['image/jpeg'],
+          },
+        );
+      });
+      final result = await client.get<List<int>>(
+        'protected-photo',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      expect(result.data, [255, 216, 255]);
+      expect(requests, 2);
+      expect(api.refreshCalls, 1);
+      expect(repository.state, isA<SessionAuthenticated>());
     },
   );
   test('second expired response stops retry and invalidates session', () async {

@@ -129,6 +129,8 @@ class FakeMemberRepository implements MemberRepository {
   Object? failure;
   bool empty = false, populated = false;
   int total = 1;
+  List<Map<String, dynamic>>? historyRecords;
+  Completer<MembershipHistory>? historyGate;
   final listCalls = <({String gymId, MemberListQuery query})>[];
   final operations = <String>[];
   final writes = <Map<String, dynamic>>[];
@@ -206,10 +208,20 @@ class FakeMemberRepository implements MemberRepository {
   ) async {
     operations.add('history:$page');
     _check();
-    return MembershipHistory.fromResponse(historyJson(populated: populated), {
+    if (historyGate != null) return historyGate!.future;
+    final data = historyRecords == null
+        ? historyJson(populated: populated)
+        : {
+            ...historyJson(),
+            'subscriptions': historyRecords!
+                .skip((page - 1) * 20)
+                .take(20)
+                .toList(),
+          };
+    return MembershipHistory.fromResponse(data, {
       'page': page,
       'limit': 20,
-      'total': populated ? total : 0,
+      'total': historyRecords?.length ?? (populated ? total : 0),
     });
   }
 
@@ -232,3 +244,47 @@ class FakeMemberRepository implements MemberRepository {
     });
   }
 }
+
+/// Actual paginated member DTOs; gender filtering remains in the production provider.
+class GenderMemberRepository extends FakeMemberRepository {
+  final profiles = List.generate(
+    125,
+    (index) => MemberProfile.fromJson({
+      ...profileJson(firstName: 'Person $index'),
+      'id': index.toRadixString(16).padLeft(24, '0'),
+      'memberCode': 'M$index',
+      if (index % 3 != 2) 'gender': index % 3 == 0 ? 'male' : 'female',
+    }),
+  );
+  @override
+  Future<MembersPage> list(String gymId, MemberListQuery query) async {
+    listCalls.add((gymId: gymId, query: query));
+    if (failure != null) throw failure!;
+    final found = profiles
+        .where(
+          (profile) =>
+              query.search.isEmpty ||
+              profile.name.toLowerCase().contains(query.search.toLowerCase()),
+        )
+        .toList();
+    return MembersPage(
+      found.skip((query.page - 1) * query.limit).take(query.limit).toList(),
+      Pagination.fromJson({
+        'page': query.page,
+        'limit': query.limit,
+        'total': found.length,
+      }),
+    );
+  }
+}
+
+List<Map<String, dynamic>> expiredHistoryFixture() => [
+  subscriptionJson()..addAll({
+    'status': 'expired',
+    'isCurrentlyActive': false,
+    'paymentSummary': {
+      'totalSuccessfulPaidPaise': 303,
+      'remainingBalancePaise': 149697,
+    },
+  }),
+];

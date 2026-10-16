@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/feedback_notice.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../data/trainer_failure.dart';
@@ -12,22 +13,12 @@ class TrainerError extends StatelessWidget {
   final Object? error;
   final VoidCallback retry;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      children: [
-        Semantics(
-          liveRegion: true,
-          child: Text(
-            error is TrainerFailure
-                ? (error as TrainerFailure).message
-                : 'Trainer information could not be loaded. Please try again.',
-          ),
-        ),
-        const SizedBox(height: 12),
-        FilledButton(onPressed: retry, child: const Text('Retry')),
-      ],
-    ),
+  Widget build(BuildContext context) => FeedbackNotice(
+    message: error is TrainerFailure
+        ? (error as TrainerFailure).message
+        : 'Trainer information could not be loaded. Please try again.',
+    retry: retry,
+    primaryRetry: true,
   );
 }
 

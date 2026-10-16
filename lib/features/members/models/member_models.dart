@@ -39,6 +39,10 @@ class MemberProfile {
       phone = text(json, 'phone'),
       status = MemberStatus.values.byName(text(json, 'status')),
       gender = optionalText(json, 'gender'),
+      photoUrl = optionalText(json, 'photoUrl'),
+      photoRevision = json['photoRevision'] is int
+          ? json['photoRevision'] as int
+          : 0,
       dateOfBirth = json['dateOfBirth'] == null
           ? null
           : CalendarDate.parse(text(json, 'dateOfBirth')),
@@ -49,7 +53,8 @@ class MemberProfile {
       );
   final String id, memberCode, firstName, lastName, phone;
   // Member 360 deliberately excludes gymId and userId. Scope belongs to the request.
-  final String? gymId, branchId, gender;
+  final String? gymId, branchId, gender, photoUrl;
+  final int photoRevision;
   final CalendarDate? dateOfBirth;
   final MemberStatus status;
   final MemberAddress? address;
@@ -69,20 +74,29 @@ class MemberListQuery {
     this.limit = 20,
     String search = '',
     this.status,
+    this.gender,
   }) : search = search.trim() {
     if (page < 1 ||
         page > 10000 ||
         limit < 1 ||
         limit > 100 ||
-        this.search.length > 100) {
+        this.search.length > 100 ||
+        gender != null && !['male', 'female'].contains(gender)) {
       throw const FormatException('Invalid member query.');
     }
   }
   final int page, limit;
   final String search;
   final MemberStatus? status;
-  MemberListQuery withPage(int page) =>
-      MemberListQuery(page: page, limit: limit, search: search, status: status);
+  // Presentation-only filter: the existing backend list API has no gender query.
+  final String? gender;
+  MemberListQuery withPage(int page) => MemberListQuery(
+    page: page,
+    limit: limit,
+    search: search,
+    status: status,
+    gender: gender,
+  );
   Map<String, dynamic> toParameters() => {
     'page': '$page',
     'limit': '$limit',

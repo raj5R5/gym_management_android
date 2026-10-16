@@ -4,6 +4,26 @@ import 'package:gym_management_app/features/members/models/member_draft.dart';
 import 'member_fakes.dart';
 
 void main() {
+  test(
+    'UI gender query preserves pagination without unsupported API parameters',
+    () {
+      final query = MemberListQuery(
+        search: ' Alex ',
+        gender: 'male',
+      ).withPage(2);
+      expect(query.gender, 'male');
+      expect(query.toParameters(), {
+        'page': '2',
+        'limit': '20',
+        'search': 'Alex',
+      });
+      expect(
+        () => MemberListQuery(gender: 'unsupported'),
+        throwsFormatException,
+      );
+      expect(MemberListQuery(gender: 'female').gender, 'female');
+    },
+  );
   test('member profile required fields and absent optional fields', () {
     final member = MemberProfile.fromJson(profileJson());
     expect(member.name, 'Alex River');

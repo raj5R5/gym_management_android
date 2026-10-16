@@ -151,7 +151,19 @@ class _TrainersListState extends ConsumerState<_TrainersList> {
               ),
             ...result.trainers.map(
               (trainer) => Card(
+                margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.secondaryContainer,
+                    foregroundColor: Theme.of(
+                      context,
+                    ).colorScheme.onSecondaryContainer,
+                    child: Text(
+                      trainer.firstName.characters.first.toUpperCase(),
+                    ),
+                  ),
                   title: Text(trainer.name),
                   subtitle: Text(
                     '${trainer.trainerCode} · ${trainer.phone}\n${trainer.status.name}${trainer.branchId == null ? ' · No branch assigned' : ' · Branch: ${trainer.branchId}'}${(trainer.specializations ?? []).isEmpty ? '' : '\n${trainer.specializations!.join(', ')}'}',

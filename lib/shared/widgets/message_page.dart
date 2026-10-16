@@ -7,9 +7,11 @@ class MessagePage extends StatelessWidget {
     required this.message,
     this.actions = const [],
     this.embedded = false,
+    this.alignment = Alignment.center,
   });
 
   final bool embedded;
+  final AlignmentGeometry alignment;
   final String title;
   final String message;
   final List<Widget> actions;
@@ -17,7 +19,8 @@ class MessagePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final body = SafeArea(
-      child: Center(
+      child: Align(
+        alignment: alignment,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(

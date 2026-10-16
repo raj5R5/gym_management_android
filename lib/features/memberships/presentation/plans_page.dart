@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../app/theme/design_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
@@ -13,7 +14,8 @@ String planPath(String gymId, {String? planId}) =>
     '${AppRoutes.plans}/${planId ?? 'new'}?gymId=${Uri.encodeQueryComponent(gymId)}';
 
 class PlansPage extends ConsumerStatefulWidget {
-  const PlansPage({super.key});
+  const PlansPage({super.key, this.initialActiveOnly = false});
+  final bool initialActiveOnly;
   @override
   ConsumerState<PlansPage> createState() => _PlansPageState();
 }
@@ -21,6 +23,16 @@ class PlansPage extends ConsumerStatefulWidget {
 class _PlansPageState extends ConsumerState<PlansPage> {
   int _page = 1;
   AdminGymContext? _gym;
+  late bool _activeOnly = widget.initialActiveOnly;
+  @override
+  void didUpdateWidget(PlansPage old) {
+    super.didUpdateWidget(old);
+    if (old.initialActiveOnly != widget.initialActiveOnly) {
+      _activeOnly = widget.initialActiveOnly;
+      _page = 1;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final gym = ref.watch(adminGymProvider);
@@ -30,11 +42,14 @@ class _PlansPageState extends ConsumerState<PlansPage> {
       _page = 1;
     }
     final request = (gym: gym, page: _page);
-    final plans = ref.watch(managedPlansProvider(request));
+    final provider = _activeOnly
+        ? activeManagedPlansProvider(request)
+        : managedPlansProvider(request);
+    final plans = ref.watch(provider);
     Future<void> refresh() async {
-      ref.invalidate(managedPlansProvider(request));
+      ref.invalidate(provider);
       await ref
-          .read(managedPlansProvider(request).future)
+          .read(provider.future)
           .then<void>((_) {}, onError: (Object _) {});
     }
 
@@ -63,12 +78,23 @@ class _PlansPageState extends ConsumerState<PlansPage> {
             onPressed: () => context.push(planPath(gym.gymId)),
             child: const Text('Create membership plan'),
           ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              label: const Text('Active only'),
+              selected: _activeOnly,
+              onSelected: (selected) => setState(() {
+                _activeOnly = selected;
+                _page = 1;
+              }),
+            ),
+          ),
           if (plans.isLoading)
             const Center(child: CircularProgressIndicator())
           else if (plans.hasError)
             BillingError(
               error: plans.error,
-              retry: () => ref.invalidate(managedPlansProvider(request)),
+              retry: () => ref.invalidate(provider),
             )
           else if (plans.asData?.value
               case final BillingPage<MembershipPlan> data) ...[
@@ -77,10 +103,16 @@ class _PlansPageState extends ConsumerState<PlansPage> {
             ...data.items.map(
               (plan) => ProfileSection(
                 title: plan.name,
+                icon: Icons.card_membership_outlined,
                 children: [
+                  Text(
+                    formatInrPaise(plan.pricePaise),
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
                   if (plan.description != null) Text(plan.description!),
                   Text(
-                    '${plan.durationDays} days · ${formatInrPaise(plan.pricePaise)} · ${plan.status == 'active' ? 'Active' : 'Inactive'}',
+                    '${plan.durationDays} days · ${plan.status == 'active' ? 'Active' : 'Inactive'}',
                   ),
                   OutlinedButton(
                     onPressed: () =>
@@ -328,6 +360,7 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                 const SizedBox(height: 16),
                 if (busy) const Center(child: CircularProgressIndicator()),
                 FilledButton(
+                  style: AppButtonStyles.primary(context),
                   onPressed: busy || blocked
                       ? null
                       : () async {

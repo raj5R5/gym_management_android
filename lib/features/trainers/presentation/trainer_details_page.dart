@@ -67,6 +67,7 @@ class TrainerDetailsPage extends ConsumerWidget {
           else if (trainer != null)
             ProfileSection(
               title: trainer.name,
+              icon: Icons.fitness_center_outlined,
               children: [
                 Text('Trainer code: ${trainer.trainerCode}'),
                 Text('Phone: ${trainer.phone}'),

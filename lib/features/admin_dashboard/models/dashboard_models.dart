@@ -29,9 +29,23 @@ class CalendarDate implements Comparable<CalendarDate> {
 
 /// All-branch query for M27. No date means the backend's gym-local today.
 /// Future filters belong here; widgets never construct endpoint parameters.
+enum DashboardDateFilter { today, last7Days, thisMonth, customRange }
+
 class DashboardQuery {
-  const DashboardQuery.today() : from = null, to = null;
-  DashboardQuery.range(this.from, this.to) {
+  const DashboardQuery.today()
+    : filter = DashboardDateFilter.today,
+      from = null,
+      to = null;
+  const DashboardQuery.last7Days()
+    : filter = DashboardDateFilter.last7Days,
+      from = null,
+      to = null;
+  const DashboardQuery.thisMonth()
+    : filter = DashboardDateFilter.thisMonth,
+      from = null,
+      to = null;
+  DashboardQuery.range(this.from, this.to)
+    : filter = DashboardDateFilter.customRange {
     if (from == null ||
         to == null ||
         from!.compareTo(to!) > 0 ||
@@ -44,8 +58,16 @@ class DashboardQuery {
   }
   final CalendarDate? from;
   final CalendarDate? to;
-  Map<String, String> toParameters() =>
-      from == null ? {} : {'from': from.toString(), 'to': to.toString()};
+  final DashboardDateFilter filter;
+  Map<String, String> toParameters() => switch (filter) {
+    DashboardDateFilter.today => {},
+    DashboardDateFilter.last7Days => {'preset': 'last7Days'},
+    DashboardDateFilter.thisMonth => {'preset': 'thisMonth'},
+    DashboardDateFilter.customRange => {
+      'from': from.toString(),
+      'to': to.toString(),
+    },
+  };
 }
 
 Map<String, dynamic> _object(Object? value) {
@@ -116,8 +138,12 @@ class SubscriptionMetrics {
 class PaymentMetrics {
   PaymentMetrics.fromJson(Map<String, dynamic> json)
     : periodSuccessfulAmountPaise = _count(json, 'periodSuccessfulAmountPaise'),
-      periodSuccessfulCount = _count(json, 'periodSuccessfulCount');
+      periodSuccessfulCount = _count(json, 'periodSuccessfulCount'),
+      outstandingAmountPaise = _count(json, 'outstandingAmountPaise');
   final int periodSuccessfulAmountPaise, periodSuccessfulCount;
+
+  /// Current non-cancelled membership balances; independent of revenue dates.
+  final int outstandingAmountPaise;
 }
 
 class AttendanceMetrics {
@@ -151,6 +177,7 @@ class GymDashboard {
       subscriptions.expired == 0 &&
       payments.periodSuccessfulAmountPaise == 0 &&
       payments.periodSuccessfulCount == 0 &&
+      payments.outstandingAmountPaise == 0 &&
       attendance.periodVisits == 0 &&
       attendance.periodUniqueMembers == 0 &&
       attendance.currentlyCheckedIn == 0;

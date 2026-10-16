@@ -235,4 +235,30 @@ void main() {
       throwsFormatException,
     );
   });
+  test('initial payment supports exact full, partial and zero amounts', () {
+    expect(
+      parseInitialPaymentRupees('1500.01', planPricePaise: 150001),
+      150001,
+    );
+    expect(parseInitialPaymentRupees('500.01', planPricePaise: 150001), 50001);
+    expect(parseInitialPaymentRupees('0', planPricePaise: 150001), 0);
+    expect(parseInitialPaymentRupees('0.00', planPricePaise: 0), 0);
+  });
+  for (final input in ['-1', '1500.02', '1.001', '1e3', 'NaN']) {
+    test(
+      'unsafe initial payment $input is rejected before creating a draft',
+      () {
+        expect(
+          () => parseInitialPaymentRupees(input, planPricePaise: 150001),
+          throwsFormatException,
+        );
+      },
+    );
+  }
+  test('free plans cannot accept a positive initial payment', () {
+    expect(
+      () => parseInitialPaymentRupees('0.01', planPricePaise: 0),
+      throwsFormatException,
+    );
+  });
 }

@@ -6,11 +6,16 @@ import '../../members/models/member_models.dart';
 import '../../members/providers/member_providers.dart';
 import '../../members/presentation/member_components.dart';
 import '../../../shared/formatting/inr.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../data/billing_failure.dart';
 import '../models/billing_models.dart';
 import '../providers/membership_providers.dart';
+import '../providers/payment_providers.dart';
+import '../../../shared/formatting/payment_date.dart';
 import 'billing_components.dart';
 import 'plans_page.dart' show planPath;
+import '../models/membership_eligibility.dart';
+import 'membership_eligibility_notice.dart';
 
 class PurchasePage extends ConsumerStatefulWidget {
   const PurchasePage({super.key, required this.memberId, required this.gymId});
@@ -30,6 +35,104 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
   PurchaseDraft? _review;
   BillingResult? _result;
   String? _selectionError;
+  String? _paymentNotice;
+
+  @override
+  void initState() {
+    super.initState();
+    _amount.addListener(_paymentChanged);
+    _reference.addListener(_paymentChanged);
+  }
+
+  void _paymentChanged() {
+    if (mounted) {
+      setState(() {
+        if (_paymentNotice != null && _amountError(_amount.text) == null) {
+          _paymentNotice = null;
+        }
+      });
+    }
+  }
+
+  void _clearPayment() {
+    _amount.clear();
+    _reference.clear();
+    _method = PaymentMethod.cash;
+  }
+
+  int _initialAmount(String input) =>
+      parseInitialPaymentRupees(input, planPricePaise: _plan!.pricePaise);
+
+  void _selectPlan(MembershipPlan plan) {
+    setState(() {
+      _plan = plan;
+      _review = null;
+      _selectionError = null;
+      _paymentNotice = null;
+      if (plan.pricePaise == 0) {
+        _recordPayment = false;
+        _clearPayment();
+      } else if (_recordPayment && _amount.text.isNotEmpty) {
+        try {
+          _initialAmount(_amount.text);
+        } on FormatException {
+          _clearPayment();
+          _paymentNotice =
+              'The previous payment amount is not valid for this plan. Enter a new amount before reviewing.';
+        }
+      }
+    });
+  }
+
+  String? _amountError(String? value) {
+    if (_plan == null) return 'Choose a plan before entering payment.';
+    try {
+      _initialAmount(value ?? '');
+      return null;
+    } on FormatException catch (error) {
+      return error.message;
+    }
+  }
+
+  String? _referenceError(String? value) {
+    if (_plan == null) return null;
+    try {
+      if (_initialAmount(_amount.text) == 0) return null;
+    } on FormatException {
+      return null; // The amount field explains why payment cannot proceed.
+    }
+    return paymentReferenceError(_method, value ?? '');
+  }
+
+  bool get _positivePayment {
+    if (!_recordPayment || _plan == null) return false;
+    try {
+      return _initialAmount(_amount.text) > 0;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  Widget _balanceSummary(BuildContext context) {
+    final plan = _plan;
+    if (plan == null) return const SizedBox.shrink();
+    final int received;
+    try {
+      received = _recordPayment ? _initialAmount(_amount.text) : 0;
+    } on FormatException {
+      return const Text(
+        'Enter a valid initial payment to see the remaining balance.',
+      );
+    }
+    return Semantics(
+      liveRegion: true,
+      child: Text(
+        'Initial payment: ${formatInrPaise(received)} · Remaining balance: ${formatInrPaise(plan.pricePaise - received)}',
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _amount.dispose();
@@ -49,6 +152,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
       _review = null;
       _result = null;
       _selectionError = null;
+      _paymentNotice = null;
       _amount.clear();
       _reference.clear();
     }
@@ -59,10 +163,13 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
     final gym = ref.watch(adminGymProvider);
     if (gym == null) return const SizedBox.shrink();
     if (gym.gymId != widget.gymId) return const MemberContextChanged();
+    final timezone = ref.watch(paymentTimezoneProvider(gym)).asData?.value;
     final scope = scopeFor(gym, widget.memberId);
     final member = ref.watch(memberProfileProvider(scope));
     final request = (scope: scope, page: _page);
     final plans = ref.watch(activePlansProvider(request));
+    final eligibility = ref.watch(memberMembershipsProvider(scope));
+    final existing = blockingMembership(eligibility.asData?.value ?? []);
     final mutation = ref.watch(billingMutationProvider(scope));
     final blocked =
         mutation.error is BillingFailure &&
@@ -106,12 +213,27 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
               'Manual payment recording only. No online payment or banking credentials.',
             ),
             if (_result case final BillingResult result) ...[
-              BillingResultCard(result: result),
+              BillingResultCard(result: result, timezone: timezone),
               FilledButton(
                 onPressed: () => context.go(membershipPath(scope)),
                 child: const Text('View updated history'),
               ),
-            ] else ...[
+            ] else if (eligibility.isLoading)
+              const Text('Checking membership eligibility…')
+            else if (eligibility.hasError)
+              BillingError(
+                error: eligibility.error,
+                retry: () => ref.invalidate(memberMembershipsProvider(scope)),
+              )
+            else if (existing != null)
+              MembershipEligibilityNotice(
+                membership: existing,
+                scope: scope,
+                retry: () => ref.invalidate(memberMembershipsProvider(scope)),
+              )
+            else if (eligibility.asData?.value == null)
+              const MemberContextChanged()
+            else ...[
               if (mutation.hasError) BillingError(error: mutation.error),
               if (blocked) ...[
                 OutlinedButton(
@@ -125,6 +247,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
               if (draft != null) ...[
                 ProfileSection(
                   title: 'Review purchase',
+                  tone: AppTone.plan,
                   children: [
                     Text(_plan!.name),
                     Text(
@@ -135,19 +258,26 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                     ),
                     if (draft.payment case final ManualPayment payment) ...[
                       Text(
-                        'Successful payment: ${formatInrPaise(payment.amountPaise)} · ${payment.method.label}',
+                        'Payment to record: ${formatInrPaise(payment.amountPaise)} · ${payment.method.label}',
                       ),
                       if (payment.reference.isNotEmpty)
                         Text('Reference: ${payment.reference}'),
                       Text(
-                        'Paid at review time: ${payment.paidAt.toUtc().toIso8601String()} (UTC)',
+                        'Payment date: ${formatPaymentDateTime(MaterialLocalizations.of(context), payment.paidAt, timezone: timezone)}',
                       ),
                     ] else
                       const Text('No payment will be recorded.'),
+                    Text(
+                      'Remaining balance: ${formatInrPaise(_plan!.pricePaise - (draft.payment?.amountPaise ?? 0))}',
+                    ),
+                    const Text(
+                      'Payment is recorded only after backend confirmation.',
+                    ),
                   ],
                 ),
                 if (busy) const Center(child: CircularProgressIndicator()),
                 FilledButton(
+                  style: AppButtonStyles.primary(context),
                   onPressed: busy || blocked
                       ? null
                       : () async {
@@ -180,6 +310,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                     children: [
                       ProfileSection(
                         title: 'Select an active plan',
+                        tone: AppTone.plan,
                         children: [
                           if (plans.isLoading)
                             const Center(child: CircularProgressIndicator())
@@ -218,6 +349,9 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                                                 _page = 1;
                                                 _plan = null;
                                                 _selectionError = null;
+                                                _recordPayment = false;
+                                                _paymentNotice = null;
+                                                _clearPayment();
                                               });
                                             }
                                           },
@@ -240,10 +374,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                                 ),
                                 onTap: busy || blocked
                                     ? null
-                                    : () => setState(() {
-                                        _plan = plan;
-                                        _selectionError = null;
-                                      }),
+                                    : () => _selectPlan(plan),
                               ),
                             ),
                             PageControls(
@@ -267,15 +398,40 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                             ),
                         ],
                       ),
+                      if (_plan != null) ...[
+                        Text(
+                          'Plan price: ${formatInrPaise(_plan!.pricePaise)}',
+                        ),
+                        if (_plan!.pricePaise == 0)
+                          const Text(
+                            'Free plan · ₹0.00. No initial payment is required.',
+                          ),
+                      ],
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Record a successful payment'),
+                        title: const Text('Record an initial payment'),
+                        subtitle: const Text(
+                          'Leave off to pay later. Enter the full price or a partial amount.',
+                        ),
                         value: _recordPayment,
-                        onChanged: busy || blocked
+                        onChanged:
+                            busy ||
+                                blocked ||
+                                _plan == null ||
+                                _plan!.pricePaise == 0
                             ? null
-                            : (value) => setState(() => _recordPayment = value),
+                            : (value) => setState(() {
+                                _recordPayment = value;
+                                _paymentNotice = null;
+                                if (!value) _clearPayment();
+                              }),
                       ),
                       if (_recordPayment) ...[
+                        if (_paymentNotice != null)
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(_paymentNotice!),
+                          ),
                         TextFormField(
                           key: const ValueKey('paymentAmount'),
                           controller: _amount,
@@ -283,25 +439,34 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Amount in INR',
                             prefixText: '₹ ',
                             helperText:
-                                'Example: 1500.50. Maximum ₹1,00,00,000.00.',
+                                'Maximum ${formatInrPaise(_plan!.pricePaise)}. Enter 0 to pay later.',
                           ),
-                          validator: (value) {
-                            try {
-                              parsePaymentRupees(value ?? '');
-                              return null;
-                            } on FormatException catch (error) {
-                              return error.message;
-                            }
-                          },
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          validator: _amountError,
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: busy || blocked
+                                ? null
+                                : () {
+                                    final price = _plan!.pricePaise;
+                                    _amount.text =
+                                        '${price ~/ 100}.${(price % 100).toString().padLeft(2, '0')}';
+                                    setState(() => _paymentNotice = null);
+                                  },
+                            child: const Text('Use full plan price'),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<PaymentMethod>(
                           key: const ValueKey('paymentMethod'),
                           initialValue: _method,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Payment method',
                           ),
@@ -321,19 +486,22 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                         TextFormField(
                           key: const ValueKey('paymentReference'),
                           controller: _reference,
-                          enabled: !busy && !blocked,
+                          enabled: !busy && !blocked && _positivePayment,
                           maxLength: 120,
                           decoration: InputDecoration(
-                            labelText: _method.requiresReference
+                            labelText:
+                                _positivePayment && _method.requiresReference
                                 ? 'Payment reference (required)'
                                 : 'Payment reference (optional)',
-                            helperText:
-                                'Transaction reference only. Never enter card or banking credentials.',
+                            helperText: _positivePayment
+                                ? 'Transaction reference only. Never enter card or banking credentials.'
+                                : 'A zero payment needs no reference and records no payment.',
                           ),
-                          validator: (value) =>
-                              paymentReferenceError(_method, value ?? ''),
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
+                          validator: _referenceError,
                         ),
                       ],
+                      _balanceSummary(context),
                       const SizedBox(height: 16),
                       FilledButton(
                         onPressed: busy || blocked
@@ -349,9 +517,11 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                                 setState(
                                   () => _review = PurchaseDraft(
                                     planId: _plan!.id,
-                                    payment: _recordPayment
+                                    payment:
+                                        _recordPayment &&
+                                            _initialAmount(_amount.text) > 0
                                         ? ManualPayment(
-                                            amountPaise: parsePaymentRupees(
+                                            amountPaise: _initialAmount(
                                               _amount.text,
                                             ),
                                             method: _method,

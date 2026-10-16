@@ -49,6 +49,20 @@ String? paymentReferenceError(PaymentMethod method, String input) {
   return null;
 }
 
+/// Zero means no initial payment object. Plan terms still come from the server.
+int parseInitialPaymentRupees(String input, {required int planPricePaise}) {
+  if (input.trim().startsWith('-')) {
+    throw const FormatException('The initial payment cannot be negative.');
+  }
+  final amount = parsePaymentRupees(input, allowZero: true);
+  if (amount > planPricePaise) {
+    throw const FormatException(
+      'Payment cannot exceed the selected plan price.',
+    );
+  }
+  return amount;
+}
+
 class MembershipPlan {
   MembershipPlan.fromJson(Map<String, dynamic> json)
     : id = text(json, 'id'),

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:gym_management_app/features/memberships/models/renewal_preview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/core/config/app_config.dart';
 import 'package:gym_management_app/core/network/api_client.dart';
@@ -475,4 +476,122 @@ void main() {
       ),
     );
   });
+  test(
+    'renewal preview is an authenticated scoped GET with authoritative terms',
+    () async {
+      final adapter = CallbackAdapter((request) {
+        expect(request.method, 'GET');
+        expect(
+          request.uri.path,
+          '/api/v1/gyms/$gymA/subscriptions/$subscriptionId/renewal-preview',
+        );
+        expect(request.data, isNull);
+        return jsonResponse(envelope(renewalPreviewJson()));
+      });
+      client.httpClientAdapter = adapter;
+      final preview = await repository.renewalPreview(
+        gymA,
+        memberId,
+        subscriptionId,
+      );
+      expect(preview.pricePaise, 150000);
+      expect(preview.startDate.toString(), '2026-03-31');
+      expect(adapter.requests.length, 1);
+    },
+  );
+  test(
+    'renewal posts exact preview terms after ownership verification',
+    () async {
+      final preview = RenewalPreview.fromJson(renewalPreviewJson());
+      final adapter = CallbackAdapter((request) {
+        if (request.method == 'GET') {
+          return jsonResponse(
+            envelope({
+              'subscription': fullSubscription(),
+              'paymentSummary': {
+                'totalSuccessfulPaidPaise': 303,
+                'remainingBalancePaise': 149697,
+              },
+            }),
+          );
+        }
+        expect(
+          request.uri.path,
+          '/api/v1/gyms/$gymA/subscriptions/$subscriptionId/renew',
+        );
+        expect(request.data, preview.toRequest());
+        return jsonResponse(
+          envelope(
+            fullSubscription()..addAll({
+              'id': '000000000000000000000088',
+              'previousSubscriptionId': subscriptionId,
+              'startDate': '2026-03-31',
+              'endDate': '2026-04-30',
+            }),
+          ),
+          status: 201,
+        );
+      });
+      client.httpClientAdapter = adapter;
+      await repository.renew(gymA, memberId, subscriptionId, preview: preview);
+      expect(adapter.requests.map((e) => e.method), ['GET', 'POST']);
+    },
+  );
+  test('foreign preview cannot authorize a renewal', () async {
+    final adapter = CallbackAdapter((_) => jsonResponse(envelope({})));
+    client.httpClientAdapter = adapter;
+    final preview = RenewalPreview.fromJson(
+      renewalPreviewJson()..['gymId'] = gymB,
+    );
+    await expectLater(
+      repository.renew(gymA, memberId, subscriptionId, preview: preview),
+      throwsA(isA<BillingFailure>()),
+    );
+    expect(adapter.requests, isEmpty);
+  });
+  test('a returned foreign preview is rejected before display', () async {
+    client.httpClientAdapter = CallbackAdapter(
+      (_) => jsonResponse(envelope(renewalPreviewJson()..['gymId'] = gymB)),
+    );
+    await expectLater(
+      repository.renewalPreview(gymA, memberId, subscriptionId),
+      throwsA(isA<BillingFailure>()),
+    );
+  });
+  test(
+    'changed terms are a definite rejection with a safe review message',
+    () async {
+      client.httpClientAdapter = CallbackAdapter((request) {
+        if (request.method == 'GET') {
+          return jsonResponse(
+            envelope({
+              'subscription': fullSubscription(),
+              'paymentSummary': {
+                'totalSuccessfulPaidPaise': 303,
+                'remainingBalancePaise': 149697,
+              },
+            }),
+          );
+        }
+        return jsonResponse({
+          'success': false,
+          'error': {'code': 'RENEWAL_PREVIEW_CHANGED', 'message': 'PRIVATE'},
+        }, status: 409);
+      });
+      await expectLater(
+        repository.renew(
+          gymA,
+          memberId,
+          subscriptionId,
+          preview: RenewalPreview.fromJson(renewalPreviewJson()),
+        ),
+        throwsA(
+          isA<BillingFailure>()
+              .having((e) => e.code, 'code', 'RENEWAL_PREVIEW_CHANGED')
+              .having((e) => e.uncertain, 'uncertain', false)
+              .having((e) => e.message, 'safe', isNot(contains('PRIVATE'))),
+        ),
+      );
+    },
+  );
 }

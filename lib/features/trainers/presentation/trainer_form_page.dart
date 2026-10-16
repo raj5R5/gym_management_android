@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../app/theme/design_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
@@ -359,18 +360,22 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
                 ),
               const SizedBox(height: 12),
               FilledButton(
+                style: AppButtonStyles.primary(context),
                 onPressed: busy ? null : _save,
                 child: busy
-                    ? const Row(
+                    ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
                           ),
-                          SizedBox(width: 12),
-                          Text('Saving…'),
+                          const SizedBox(width: 12),
+                          const Text('Saving…'),
                         ],
                       )
                     : Text(_editing ? 'Save changes' : 'Create trainer'),

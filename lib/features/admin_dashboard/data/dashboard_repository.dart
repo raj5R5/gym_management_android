@@ -31,6 +31,17 @@ class DioDashboardRepository implements DashboardRepository {
       final dashboard = GymDashboard.fromJson(
         body['data'] as Map<String, dynamic>,
       );
+      final from = dashboard.period.from.value;
+      final to = dashboard.period.to.value;
+      if ((query.filter == DashboardDateFilter.last7Days &&
+              to.difference(from).inDays != 6) ||
+          (query.filter == DashboardDateFilter.thisMonth &&
+              (from.day != 1 ||
+                  from.year != to.year ||
+                  from.month != to.month ||
+                  to.day != DateTime.utc(to.year, to.month + 1, 0).day))) {
+        throw const FormatException('Dashboard preset mismatch.');
+      }
       // A filtered or mismatched period must not be presented as all-branch data.
       if (dashboard.period.branchId != null ||
           (query.from != null &&

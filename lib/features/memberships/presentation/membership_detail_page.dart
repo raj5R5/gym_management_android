@@ -6,10 +6,16 @@ import '../../members/models/member_models.dart';
 import '../../members/providers/member_providers.dart';
 import '../../members/presentation/member_components.dart';
 import '../../../shared/formatting/inr.dart';
+import '../../../shared/formatting/payment_date.dart';
 import '../data/billing_failure.dart';
 import '../models/billing_models.dart';
 import '../providers/membership_providers.dart';
+import '../providers/payment_providers.dart';
 import 'billing_components.dart';
+import 'record_payment_sheet.dart';
+import 'renewal_confirmation_sheet.dart';
+import 'cancellation_confirmation_sheet.dart';
+import '../providers/renewal_providers.dart';
 
 class MembershipDetailPage extends ConsumerStatefulWidget {
   const MembershipDetailPage({
@@ -26,24 +32,14 @@ class MembershipDetailPage extends ConsumerStatefulWidget {
 }
 
 class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
-  final _reason = TextEditingController();
-  String? _action;
   BillingResult? _result;
-  @override
-  void dispose() {
-    _reason.dispose();
-    super.dispose();
-  }
-
   @override
   void didUpdateWidget(MembershipDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.memberId != widget.memberId ||
         oldWidget.gymId != widget.gymId ||
         oldWidget.subscriptionId != widget.subscriptionId) {
-      _action = null;
       _result = null;
-      _reason.clear();
     }
   }
 
@@ -52,9 +48,23 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
     final gym = ref.watch(adminGymProvider);
     if (gym == null) return const SizedBox.shrink();
     if (gym.gymId != widget.gymId) return const MemberContextChanged();
+    final timezone = ref.watch(paymentTimezoneProvider(gym)).asData?.value;
     final scope = scopeFor(gym, widget.memberId);
     final request = (scope: scope, subscriptionId: widget.subscriptionId);
     final detail = ref.watch(membershipDetailProvider(request));
+    final member = ref.watch(memberProfileProvider(scope));
+    final collectionScope = (
+      member: scope,
+      subscriptionId: widget.subscriptionId,
+    );
+    final collection = ref.watch(paymentCollectionProvider(collectionScope));
+    final collector = ref.read(
+      paymentCollectionProvider(collectionScope).notifier,
+    );
+    final savedPayment =
+        collector.hasSavedOperation ||
+        (collection.error is BillingFailure &&
+            (collection.error! as BillingFailure).uncertain);
     final mutation = ref.watch(billingMutationProvider(scope));
     final busy = mutation.isLoading;
     final blocked =
@@ -89,8 +99,16 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
               ),
             ],
           ),
-          if (_result case final BillingResult result)
-            BillingResultCard(result: result),
+          if (_result case final BillingResult result) ...[
+            if (result.subscription.status == 'cancelled')
+              Semantics(
+                liveRegion: true,
+                child: const Text(
+                  'Membership cancelled. History has been kept. No refund was made.',
+                ),
+              ),
+            BillingResultCard(result: result, timezone: timezone),
+          ],
           if (detail.isLoading)
             const Center(child: CircularProgressIndicator())
           else if (detail.hasError)
@@ -109,7 +127,7 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
                 Text('Balance: ${formatInrPaise(data.payments.balancePaise)}'),
                 if (data.subscription.cancelledAt != null)
                   Text(
-                    'Cancelled: ${data.subscription.cancelledAt!.toUtc().toIso8601String()} (UTC)',
+                    'Cancelled: ${formatPaymentDateTime(MaterialLocalizations.of(context), data.subscription.cancelledAt!, timezone: timezone)}',
                   ),
                 if (data.subscription.cancellationReason != null)
                   Text('Reason: ${data.subscription.cancellationReason}'),
@@ -123,83 +141,78 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
                 onPressed: () => context.go(membershipPath(scope)),
                 child: const Text('Check membership and payment history'),
               ),
-            if (_action == null && data.subscription.status != 'cancelled') ...[
+            if (savedPayment)
+              FilledButton.icon(
+                onPressed: busy
+                    ? null
+                    : () => showRecordPayment(
+                        context,
+                        collectionScope,
+                        member.asData?.value?.name,
+                        memberCode: member.asData?.value?.memberCode,
+                      ),
+                icon: const Icon(Icons.restore),
+                label: const Text('Review saved payment'),
+              ),
+            if (data.subscription.status != 'cancelled') ...[
+              if (data.payments.balancePaise > 0 && !savedPayment)
+                FilledButton.icon(
+                  onPressed: busy || blocked
+                      ? null
+                      : () => showRecordPayment(
+                          context,
+                          (
+                            member: scope,
+                            subscriptionId: widget.subscriptionId,
+                          ),
+                          member.asData?.value?.name,
+                          memberCode: member.asData?.value?.memberCode,
+                        ),
+                  icon: const Icon(Icons.add_card_outlined),
+                  label: const Text('Record Payment'),
+                ),
               OutlinedButton(
                 onPressed: busy || blocked
                     ? null
-                    : () => setState(() => _action = 'cancel'),
+                    : () async {
+                        ref.invalidate(memberProfileProvider(scope));
+                        ref.invalidate(membershipDetailProvider(request));
+                        final result = await showCancellationConfirmation(
+                          context,
+                          request,
+                        );
+                        if (!mounted ||
+                            !matchesScope(ref.read(adminGymProvider), scope) ||
+                            result == null) {
+                          return;
+                        }
+                        setState(() => _result = result);
+                      },
                 child: const Text('Cancel membership'),
               ),
               FilledButton(
                 onPressed: busy || blocked
                     ? null
-                    : () => setState(() => _action = 'renew'),
+                    : () async {
+                        ref.invalidate(membershipDetailProvider(request));
+                        ref.invalidate(renewalPreviousPlanProvider(request));
+                        ref.invalidate(
+                          activePlansProvider((scope: scope, page: 1)),
+                        );
+                        final result = await showRenewalConfirmation(
+                          context,
+                          scope,
+                          widget.subscriptionId,
+                        );
+                        if (!mounted ||
+                            !matchesScope(ref.read(adminGymProvider), scope)) {
+                          return;
+                        }
+                        setState(() => _result = result);
+                      },
                 child: const Text('Review renewal'),
               ),
             ],
-            if (_action != null)
-              ProfileSection(
-                title: _action == 'cancel'
-                    ? 'Confirm cancellation'
-                    : 'Confirm renewal',
-                children: [
-                  if (_action == 'cancel') ...[
-                    const Text(
-                      'Cancel this membership? Membership and payment history will be preserved. No refund is created.',
-                    ),
-                    TextField(
-                      key: const ValueKey('cancellationReason'),
-                      controller: _reason,
-                      enabled: !busy,
-                      maxLength: 500,
-                      decoration: const InputDecoration(
-                        labelText: 'Reason (optional)',
-                      ),
-                    ),
-                  ] else
-                    const Text(
-                      'Renew this membership using the current plan terms? The server determines dates, price snapshot and eligibility. No payment is recorded by renewal.',
-                    ),
-                  if (busy) const Center(child: CircularProgressIndicator()),
-                  FilledButton(
-                    onPressed: busy || blocked
-                        ? null
-                        : () async {
-                            final controller = ref.read(
-                              billingMutationProvider(scope).notifier,
-                            );
-                            final result = _action == 'cancel'
-                                ? await controller.cancel(
-                                    widget.subscriptionId,
-                                    _reason.text,
-                                  )
-                                : await controller.renew(widget.subscriptionId);
-                            if (!mounted ||
-                                !matchesScope(
-                                  ref.read(adminGymProvider),
-                                  scope,
-                                )) {
-                              return;
-                            }
-                            setState(() {
-                              _result = result;
-                              _action = null;
-                            });
-                          },
-                    child: Text(
-                      _action == 'cancel'
-                          ? 'Confirm cancellation'
-                          : 'Confirm renewal',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: busy
-                        ? null
-                        : () => setState(() => _action = null),
-                    child: const Text('Keep unchanged'),
-                  ),
-                ],
-              ),
           ],
         ],
       ),

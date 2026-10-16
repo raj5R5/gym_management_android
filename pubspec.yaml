@@ -38,6 +38,9 @@ dependencies:
   go_router: ^17.5.0
   dio: ^5.11.1
   flutter_secure_storage: ^11.2.0
+  timezone: ^0.11.2
+  image_picker: ^1.2.3
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +63,13 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -91,3 +101,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Pinned upstream copies with onboarding-only native durability methods.
+dependency_overrides:
+  flutter_secure_storage:
+    path: vendor/flutter_secure_storage
+  flutter_secure_storage_darwin:
+    path: vendor/flutter_secure_storage_darwin

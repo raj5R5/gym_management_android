@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/widgets/feedback_notice.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
@@ -17,20 +18,11 @@ class AttendanceError extends StatelessWidget {
   final Object? error;
   final VoidCallback? retry;
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Semantics(
-        liveRegion: true,
-        child: Text(
-          error is AttendanceFailure
-              ? (error as AttendanceFailure).message
-              : 'Attendance could not be loaded. Please try again.',
-        ),
-      ),
-      if (retry != null)
-        TextButton(onPressed: retry, child: const Text('Retry')),
-    ],
+  Widget build(BuildContext context) => FeedbackNotice(
+    message: error is AttendanceFailure
+        ? (error as AttendanceFailure).message
+        : 'Attendance could not be loaded. Please try again.',
+    retry: retry,
   );
 }
 
@@ -255,6 +247,7 @@ class _AttendancePageViewState extends ConsumerState<AttendancePageView> {
                   child: const Text('Clear member filter'),
                 ),
 
+              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 key: ValueKey('attendanceStatus:${gym.gymId}'),
                 initialValue: _status?.name ?? 'all',

@@ -28,6 +28,7 @@ AuthIdentity adminIdentity({
 Map<String, dynamic> dashboardJson({
   bool empty = false,
   int revenue = 123456789,
+  int outstanding = 50000,
 }) => {
   'period': {
     'timezone': 'Asia/Kolkata',
@@ -57,6 +58,7 @@ Map<String, dynamic> dashboardJson({
   'payments': {
     'periodSuccessfulAmountPaise': empty ? 0 : revenue,
     'periodSuccessfulCount': empty ? 0 : 5,
+    'outstandingAmountPaise': empty ? 0 : outstanding,
   },
   'attendance': {
     'periodVisits': empty ? 0 : 20,
