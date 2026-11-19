@@ -1,10 +1,9 @@
-# Gym Management System
+# MuscleDesk
 
-Flutter application targeting Android and iOS. The initial foundation includes
-Riverpod dependency composition, centralized routing, Material themes, public
-build configuration, and a Dio client. Authentication includes login, secure
-session restoration, auth-aware navigation, and logout. Business features are
-not implemented; authenticated home remains a placeholder.
+Flutter owner/admin application targeting Android and iOS. Implemented features
+include members, trainers, plans, memberships, manual payments, dues, revenue,
+profile photos and privacy. Attendance and branch management are retired. See
+[current scope, compatibility and release blockers](docs/scope-cleanup.md).
 
 ## Development
 
@@ -32,25 +31,29 @@ Pass public values with Dart defines:
 
 Development can omit the API URL. Requests then fail explicitly before reaching
 the network. Staging, production, and all release builds require an API URL.
-Release builds also require an explicit environment. URLs cannot include
+Release builds require `APP_ENV=production` and the approved
+`https://gym-api.semgroup.in/api/v1/` API. URLs cannot include
 credentials, query parameters, or fragments. Base paths are preserved by using
 relative endpoint paths in future API services.
 
 ```sh
 flutter run --dart-define=APP_ENV=development
 flutter run --dart-define=APP_ENV=staging --dart-define=API_BASE_URL=https://staging.example.test/api/v1/
-flutter build apk --release --dart-define=APP_ENV=production --dart-define=API_BASE_URL=https://api.example.test/api/v1/
+# A Play release requires complete public metadata and private upload signing:
+python3 tool/play_release.py --config release/production.json --check-urls --build
 ```
 
-The URLs above are examples, not deployed services. Restoration calls refresh
+The development/staging URLs above are examples, not deployed services. Restoration calls refresh
 and `/auth/me` only when a scoped credential exists; login/logout use the
 configured API. Invalid configuration fails at startup with a descriptive
 `FormatException`. Dart defines are compiled into the app: never put secrets,
 passwords, private API keys, or JWT signing secrets in them.
 
-Native flavors and production signing are not configured. The release command
-above demonstrates configuration only; existing Android release signing still
-uses the starter debug key and must be addressed before distribution.
+Native flavors are not configured. Android release signing now requires a private
+upload keystore and final public release metadata; it never falls back to the
+debug key. The example command above is configuration guidance, not a publishable
+release command. Follow [Play release preparation](docs/play-release.md), including
+privacy/deletion, production operations and the final signed AAB checks.
 
 ## Structure
 
@@ -164,9 +167,23 @@ flutter run --dart-define=APP_ENV=development --dart-define=API_BASE_URL=http://
 
 The Android emulator's `10.0.2.2` alias reaches the host machine. This URL is a
 development command only, never a source-code default. Debug networking allows
-cleartext only to this emulator alias. Other hosts and release builds retain
-HTTPS defaults; physical-device and iOS connectivity must be configured
-separately. Production and staging AppConfig validation still requires HTTPS.
+cleartext only to this emulator alias and to `localhost`/`127.0.0.1`. Release
+builds retain HTTPS defaults. Production and staging AppConfig validation still
+requires HTTPS.
+
+### Android phone over USB (local backend)
+
+Start the backend (`npm start` on port 8001), forward the phone's port to the
+Mac, then run with the local settings file:
+
+```sh
+adb reverse tcp:8001 tcp:8001
+flutter run -d <device-id> --dart-define-from-file=release/local.json
+```
+
+`release/local.json` holds only `APP_ENV=development` and the localhost API URL.
+A local test login can be kept in `release/local-test-account.json`, which Git
+ignores. Switch back with `--dart-define-from-file=release/production.json`.
 
 Android Internet permission is included in the main manifest. Backup and device
 transfer rules exclude the secure-storage credential/key files. iOS uses
@@ -477,72 +494,11 @@ Five Material navigation destinations are verified at 320px width with enlarged
 text. Live testing should cover direct Plans navigation, create/edit/status changes,
 empty-purchase creation/return, and existing Dashboard/Members/Trainers/More/logout.
 
-### M31: Admin attendance operations
+### Retired scope
 
-Attendance is temporarily parked pending biometric/device/automated attendance
-integration design. It has no Admin drawer entry, app-bar shortcut or bottom
-navigation entry. Dashboard, Members, Trainers, Plans and More remain available.
-The implementation and tests are retained, with no backend changes. Existing
-Dashboard/member attendance metrics remain unchanged. Parked routes are
-`/home/attendance` and `/home/attendance/check-in?gymId=...`. Back from the root
-returns to Dashboard; the member picker returns to Attendance. More/logout and
-existing auth restoration/refresh guards are retained.
-
-The typed attendance repository uses the existing authenticated Dio only:
-
-- `GET /api/v1/gyms/:gymId/attendance/today?page=...&limit=20`, optionally
-  `status=open|completed` and a trusted selected `memberId`. M19 returns
-  `{success, data: {date, timezone, summary, visits}, meta: {requestId, pagination}}`.
-  Summary fields are `totalVisits`, `completedVisits`, `currentlyCheckedIn` and
-  `uniqueMembers`, reflecting the server filters across all pages. Visit fields
-  are `id`, `memberId`, `memberCode`, `memberName`, `branchId`, `branchName`,
-  `subscriptionId`, `checkInAt`, `checkOutAt`, `status`, `durationMs`.
-- `GET /api/v1/gyms/:gymId/attendance?page=...&limit=20&status=open`. M16 returns
-  an array of full attendance DTOs and `meta.pagination: {page, limit, total}`.
-  It intentionally has **no date filter**, keeping older/overnight open visits
-  actionable: M19 today alone excludes them. Full DTOs contain `id`, `gymId`,
-  `memberId`, `branchId`, `subscriptionId`, `status`, `checkInAt`, `checkOutAt`,
-  `durationMs`, `recordedByUserId`, `createdAt` and `updatedAt`. Open member identity
-  reuses the existing scoped member profile provider because M16 has no names.
-- `POST /api/v1/gyms/:gymId/attendance/check-in`: exactly `{memberId, branchId}`;
-  201 with a full open attendance DTO. The controller freshly reads the selected
-  member using the existing member repository, verifies the session/gym is still
-  current, and takes the assigned branch from that trusted profile.
-- `POST /api/v1/gyms/:gymId/attendance/:attendanceId/check-out`: `{}`; 200 with
-  a full completed DTO. Timestamps, membership selection, eligibility, atomic
-  lifecycle changes and duration remain entirely server-owned.
-
-The screen shows all-date open visits, server-confirmed check-in/out results, and
-paginated today's visits (completed by default). Status and member filters apply
-to today's history only. Member selection/search reuses the existing member list
-contract for name/member code/phone, with explicit confirmation before a write.
-Both attendance lists have loading, empty, safe error/retry and refresh states.
-The server's `date` and IANA `timezone` define gym today; no client day boundaries
-are sent. Visit instants are displayed in the device timezone, explicitly labelled,
-and durations format the integer server `durationMs`, never timestamp subtraction.
-
-Branch selection remains deferred. Attendance reads show all branches. M19 supplies
-branch names; M16 open cards display only trusted branch IDs. Members without an
-assigned branch cannot check in through this UI, and receive an honest explanation.
-Inactive/mismatched branches and membership eligibility remain backend decisions.
-There is no branch list, bootstrap endpoint, arbitrary branch input or backend change.
-
-Scoped Riverpod providers/controller prevent duplicate writes and ignore stale
-results after gym/account changes. Writes are never retried by the controller or
-repository; the existing single 401 authentication recovery/replay is preserved.
-Transport/server failures or malformed write responses are uncertain and block
-further writes until an explicit successful recheck of both open visits and today's
-attendance. Failed rechecks keep the lock. Inspect relevant pages/filters before
-another action: a successful read is not proof of absence across every page.
-The local uncertainty lock lasts for the current app/session; after restart/sign-in
-always inspect attendance before repeating a previously uncertain operation.
-
-When Attendance is re-enabled, live verification is required with an authorized
-Admin against `http://10.0.2.2:8001/api/v1/`: open Attendance, search an assigned member with a
-valid subscription, confirm check-in, inspect the open visit, confirm checkout,
-inspect completed duration, refresh/filter/page, and verify conflicts, overnight
-visits, token refresh, back, existing destinations and logout. Automated tests use
-synthetic fixtures/adapters and do not write real backend attendance records.
+Attendance/check-in and branch management are removed from the active product.
+Historical milestone descriptions above are superseded by
+[the approved scope, calendar and compatibility policy](docs/scope-cleanup.md).
 
 ## Optional member profile photos
 

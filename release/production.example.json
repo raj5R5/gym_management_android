@@ -1,0 +1,10 @@
+{
+  "APP_ENV": "production",
+  "API_BASE_URL": "https://gym-api.semgroup.in/api/v1/",
+  "PLAY_APPLICATION_ID": "com.semgroup.gymmanagement",
+  "PLAY_APP_NAME": "MuscleDesk",
+  "PUBLISHER_NAME": "Raj",
+  "SUPPORT_EMAIL": "pcterajbca7772@gmail.com",
+  "PRIVACY_POLICY_URL": "https://gym-api.semgroup.in/privacy-policy",
+  "ACCOUNT_DELETION_URL": "https://gym-api.semgroup.in/account-deletion"
+}

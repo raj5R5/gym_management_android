@@ -1,0 +1,8 @@
+# Copy to android/key.properties (Git-ignored). Never commit the real file/key.
+# Paths are absolute or relative to android/. Keep the keystore outside the repo.
+storeFile=/absolute/private/path/gym-upload.jks
+keyAlias=gym-upload
+storePassword=REPLACE_LOCALLY
+keyPassword=REPLACE_LOCALLY
+# Alternatively supply GYM_UPLOAD_KEYSTORE, GYM_UPLOAD_KEY_ALIAS,
+# GYM_UPLOAD_STORE_PASSWORD and GYM_UPLOAD_KEY_PASSWORD in the build environment.

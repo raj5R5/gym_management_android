@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Take an optional member profile photo when you choose Camera.</string>
+	<string>Scan member QR codes at check-in, and take an optional member profile photo when you choose Camera.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Select an optional member profile photo from your library.</string>
 	<key>CFBundleDevelopmentRegion</key>

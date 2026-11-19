@@ -41,6 +41,14 @@ dependencies:
   timezone: ^0.11.2
   image_picker: ^1.2.3
   path_provider: ^2.1.6
+  url_launcher: ^6.3.2
+  mobile_scanner: ^7.5.0
+  qr_flutter: ^4.1.0
+  share_plus: ^13.3.1
+  pdf: ^3.12.0
+  # pdf pulls in image; image 4.11 calls an archive API that the archive
+  # version resolvable on this Dart SDK (4.0.9) lacks. Remove once archive can move.
+  image: ">=4.5.4 <4.11.0"
 
 dev_dependencies:
   flutter_test:
@@ -64,12 +72,17 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   fonts:
-    - family: Inter
+    # Geist is the only family (OFL, see assets/fonts/Geist-OFL.txt).
+    - family: Geist
       fonts:
-        - asset: assets/fonts/Inter.ttf
-    - family: SpaceGrotesk
-      fonts:
-        - asset: assets/fonts/SpaceGrotesk.ttf
+        - asset: assets/fonts/Geist_400Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Geist_500Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist_600SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Geist_700Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:
