@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../../members/providers/member_overview_providers.dart';
 import 'package:dio/dio.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -202,6 +203,7 @@ class PaymentCollectionController extends AsyncNotifier<RecordedPayment?> {
 
   void _refresh() {
     ref.invalidate(dashboardProvider);
+    ref.invalidate(memberOverviewProvider);
     ref.invalidate(outstandingDuesProvider);
     ref.invalidate(revenueDetailsProvider);
     ref.invalidate(memberSummaryProvider(scope.member));

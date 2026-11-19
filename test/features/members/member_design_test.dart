@@ -33,8 +33,8 @@ void main() {
   test(
     'approved palette and semantic button/panel roles retain readable contrast',
     () {
-      expect(AppPalette.softBlue, const Color(0xFFE7EFFB));
-      expect(AppPalette.lavender, const Color(0xFFE7EFFB));
+      expect(AppPalette.softBlue, AppPalette.raised);
+      expect(AppPalette.lavender, AppPalette.raised);
       for (final theme in [AppTheme.light, AppTheme.dark]) {
         final surfaces = theme.extension<AppSurfaces>()!;
         for (final tone in AppTone.values) {
@@ -197,7 +197,7 @@ void main() {
           );
         }
         expect(find.text('Monthly'), findsNothing);
-        expect(find.textContaining('ME01'), findsNothing);
+        expect(find.text('Member code: ME01'), findsOneWidget);
         expect(find.textContaining('9876543210'), findsNothing);
         expect(
           tester
@@ -205,10 +205,18 @@ void main() {
               .label,
           '1 Mar 2026 – 31 Mar 2026',
         );
-        expect(find.text('1 Mar 2026 – 31 Mar 2026'), findsOneWidget);
+        // Full-sized calendar text wraps at a date boundary instead of shrinking.
+        expect(find.text('1 Mar 2026 –'), findsOneWidget);
+        expect(find.text('31 Mar 2026'), findsOneWidget);
         expect(
-          tester.widget<Text>(find.text('1 Mar 2026 – 31 Mar 2026')).maxLines,
-          1,
+          tester.widget<Text>(find.text('31 Mar 2026')).style!.fontSize,
+          12,
+        );
+        expect(
+          tester
+              .widget<MembershipDateRange>(find.byType(MembershipDateRange))
+              .singleLine,
+          isFalse,
         );
         expect(find.textContaining('Starts:'), findsNothing);
         expect(find.textContaining('Ends:'), findsNothing);
@@ -348,8 +356,8 @@ void main() {
     expect(find.text('Fully Paid'), findsNothing);
   });
   test('pending warning and grey status colors retain accessible contrast', () {
-    expect(PendingColors.surface, const Color(0xFFFBE3DF));
-    expect(PendingColors.accent, const Color(0xFFA72F35));
+    expect(PendingColors.surface, const Color(0xFFF8E1DB));
+    expect(PendingColors.accent, const Color(0xFFA02D26));
     expect(
       contrast(PendingColors.accent, PendingColors.surface),
       greaterThanOrEqualTo(3),
@@ -700,4 +708,127 @@ void main() {
       expect(find.text('Checking all balances…'), findsOneWidget);
     },
   );
+  for (final source in ['history', 'summary']) {
+    testWidgets('upcoming membership is labeled explicitly from $source', (
+      tester,
+    ) async {
+      final upcomingJson = subscriptionJson()
+        ..addAll({
+          'isCurrentlyActive': false,
+          'startDate': '2027-01-01',
+          'endDate': '2027-01-31',
+        });
+      final data = summaryJson(populated: true)
+        ..addAll({
+          'currentSubscription': null,
+          'currentSubscriptionPaymentSummary': null,
+          'subscriptionHistory': {
+            'items': [upcomingJson],
+            'page': 1,
+            'limit': 20,
+            'total': 1,
+          },
+        });
+      await tester.pumpWidget(
+        _photoScopedApp(
+          theme: AppTheme.dark,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: MemberDirectoryCard(
+                member: MemberProfile.fromJson(profileJson()),
+                summary: source == 'summary'
+                    ? AsyncData(MemberSummary.fromJson(data))
+                    : null,
+                memberships: source == 'history'
+                    ? AsyncData([Membership.fromJson(upcomingJson)])
+                    : null,
+                outstandingDues: const AsyncData(50000),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Upcoming'), findsOneWidget);
+      expect(find.text('No membership'), findsNothing);
+      expect(find.text('Expired'), findsNothing);
+      expect(find.byTooltip('Active membership'), findsNothing);
+      expect(find.text('₹500.00 due'), findsOneWidget);
+      expect(
+        tester
+            .widget<MembershipDateRange>(find.byType(MembershipDateRange))
+            .label,
+        '1 Jan 2027 – 31 Jan 2027',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final dark in [false, true]) {
+    for (final config in [(390.0, 1.0), (320.0, 2.0)]) {
+      testWidgets(
+        'duplicate long names retain distinct codes and actions, dark=$dark width=${config.$1} scale=${config.$2}',
+        (tester) async {
+          tester.view.physicalSize = Size(config.$1, 1000);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          final semantics = tester.ensureSemantics();
+          final opened = <String>[];
+          const first = 'Aleksandra';
+          const last = 'Wiśniewska-Kowalczyk';
+          const codes = ['ME01', 'ME_2026_NORTH_000000000000000001'];
+          await tester.pumpWidget(
+            _photoScopedApp(
+              theme: dark ? AppTheme.dark : AppTheme.light,
+              home: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(config.$2)),
+                child: Scaffold(
+                  body: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    child: ResponsiveMemberGrid(
+                      children: [
+                        for (final code in codes)
+                          MemberDirectoryCard(
+                            member: MemberProfile.fromJson({
+                              ...profileJson(firstName: first),
+                              'id': code,
+                              'lastName': last,
+                              'memberCode': code,
+                            }),
+                            onTap: () => opened.add(code),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('$first $last'), findsNWidgets(2));
+          expect(find.text('AW'), findsNWidgets(2));
+          for (final code in codes) {
+            final text = find.text('Member code: $code');
+            expect(text, findsOneWidget);
+            expect(
+              find.bySemanticsLabel(
+                RegExp(
+                  'View profile for $first $last\\. Member code: $code\\.',
+                ),
+              ),
+              findsOneWidget,
+            );
+            await tester.ensureVisible(text);
+            await tester.pumpAndSettle();
+            await tester.tap(text);
+            await tester.pumpAndSettle();
+          }
+          expect(opened, codes);
+          expect(tester.takeException(), isNull);
+          semantics.dispose();
+        },
+      );
+    }
+  }
 }

@@ -3,7 +3,7 @@ import 'member_models.dart';
 import '../../../shared/validators/profile_validators.dart';
 export '../../../shared/validators/profile_validators.dart';
 
-/// Explicit allowlist: tenant, user linkage and branch assignment are never inputs.
+/// Explicit allowlist: tenant and user linkage are never inputs.
 class MemberDraft {
   MemberDraft({
     required this.memberCode,
@@ -28,8 +28,7 @@ class MemberDraft {
         validateName(lastName) != null ||
         validatePhone(phone) != null ||
         gender != null && !memberGenders.contains(gender) ||
-        dateOfBirth != null &&
-            dateOfBirth!.value.isAfter(DateTime.now().toUtc())) {
+        validateMemberBirthDate(dateOfBirth?.toString()) != null) {
       throw const FormatException('Check the member information.');
     }
     return {

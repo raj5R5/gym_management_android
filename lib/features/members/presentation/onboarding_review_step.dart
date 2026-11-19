@@ -1,3 +1,4 @@
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
@@ -99,13 +100,23 @@ class OnboardingReviewStep extends StatelessWidget {
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    Text('Member code: ${member['memberCode']}'),
-                    Text('Phone: ${member['phone']}'),
+                    IconLabel(
+                      'Member code: ${member['memberCode']}',
+                      icon: Icons.badge_outlined,
+                    ),
+                    IconLabel(
+                      'Phone: ${member['phone']}',
+                      icon: Icons.phone_outlined,
+                    ),
                     if (member['dateOfBirth'] != null)
-                      Text('Date of birth: ${member['dateOfBirth']}'),
+                      IconLabel(
+                        'Date of birth: ${member['dateOfBirth']}',
+                        icon: Icons.cake_outlined,
+                      ),
                     if (member['gender'] != null)
-                      Text(
+                      IconLabel(
                         'Gender: ${(member['gender'] as String).replaceAll('_', ' ')}',
+                        icon: Icons.person_outline,
                       ),
                   ],
                 ),
@@ -145,8 +156,9 @@ class OnboardingReviewStep extends StatelessWidget {
                           'Free plan · ${formatInrPaise(plan.pricePaise)}. No payment is due.',
                         ),
                       const SizedBox(height: AppSpacing.sm),
-                      const Text(
-                        'Start date: Set by the backend when saved (UTC).',
+                      const IconLabel(
+                        'Start date: Set by the backend when saved (gym timezone).',
+                        icon: Icons.event_available_outlined,
                       ),
                     ],
                   ),

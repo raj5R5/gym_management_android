@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:gym_management_app/features/members/data/member_repository.dart';
 import 'package:gym_management_app/features/members/models/member_draft.dart';
 import 'package:gym_management_app/features/members/models/member_models.dart';
+import 'package:gym_management_app/features/members/data/member_overview_repository.dart';
+import 'package:gym_management_app/features/members/models/member_overview.dart';
 import '../admin_dashboard/dashboard_fakes.dart';
 
 const memberId = '000000000000000000000011';
@@ -288,3 +290,83 @@ List<Map<String, dynamic>> expiredHistoryFixture() => [
     },
   }),
 ];
+
+/// Overview fake backed by [FakeMemberRepository]'s switches (failure, empty,
+/// total, delayLists) so list tests keep exercising the same states.
+class FakeMemberOverviewRepository implements MemberOverviewRepository {
+  FakeMemberOverviewRepository(this.members, {this.rows});
+  final FakeMemberRepository members;
+
+  /// Optional explicit rows; defaults to one active, paid member.
+  List<Map<String, dynamic>>? rows;
+  final calls = <({String gymId, MemberOverviewQuery query})>[];
+  final pending = <Completer<MemberOverviewPage>>[];
+
+  static Map<String, dynamic> row({
+    required String gymId,
+    String firstName = 'Alex',
+    String state = 'active',
+    int daysLeft = 20,
+    int balancePaise = 0,
+    bool expiringSoon = false,
+    bool membership = true,
+  }) => {
+    'member': profileJson(gymId: gymId, firstName: firstName),
+    'membership': membership
+        ? {
+            'state': state,
+            'subscriptionId': 'subscription-1',
+            'planName': 'Monthly',
+            'membershipPlanId': 'plan-1',
+            'startDate': '2026-01-01',
+            'endDate': '2026-01-31',
+            'daysLeft': state == 'expired' ? 0 : daysLeft,
+            'daysSinceExpiry': state == 'expired' ? 3 : 0,
+            'expiringSoon': expiringSoon,
+            'renewedAhead': false,
+          }
+        : null,
+    'balancePaise': balancePaise,
+    'dueSubscriptionId': balancePaise > 0 ? 'subscription-1' : null,
+  };
+
+  @override
+  Future<MemberOverviewPage> list(
+    String gymId,
+    MemberOverviewQuery query,
+  ) async {
+    calls.add((gymId: gymId, query: query));
+    if (members.failure != null) throw members.failure!;
+    final all = members.empty
+        ? <Map<String, dynamic>>[]
+        : (rows ?? [row(gymId: gymId)]);
+    final page = MemberOverviewPage.fromJson({
+      'calendar': {'timezone': 'Asia/Kolkata', 'today': '2026-01-11'},
+      'counts': {
+        // Filters and searches narrow rows, never the gym's member count.
+        'all': members.empty
+            ? 0
+            : (rows == null || rows!.isEmpty ? members.total : rows!.length),
+        'active': 0,
+        'expiring': 0,
+        'dues': 0,
+        'expired': 0,
+        'none': 0,
+      },
+      'duesTotalPaise': 0,
+      'filter': query.filter.name,
+      'data': all,
+      'pagination': {
+        'page': query.page,
+        'limit': query.limit,
+        'total': members.empty ? 0 : (rows?.length ?? members.total),
+      },
+    });
+    if (members.delayLists) {
+      final gate = Completer<MemberOverviewPage>();
+      pending.add(gate);
+      return gate.future;
+    }
+    return page;
+  }
+}

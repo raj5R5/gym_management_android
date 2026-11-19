@@ -32,7 +32,6 @@ class MemberProfile {
   MemberProfile.fromJson(Map<String, dynamic> json)
     : id = text(json, 'id'),
       gymId = optionalText(json, 'gymId'),
-      branchId = optionalText(json, 'branchId'),
       memberCode = text(json, 'memberCode'),
       firstName = text(json, 'firstName'),
       lastName = text(json, 'lastName'),
@@ -53,7 +52,7 @@ class MemberProfile {
       );
   final String id, memberCode, firstName, lastName, phone;
   // Member 360 deliberately excludes gymId and userId. Scope belongs to the request.
-  final String? gymId, branchId, gender, photoUrl;
+  final String? gymId, gender, photoUrl;
   final int photoRevision;
   final CalendarDate? dateOfBirth;
   final MemberStatus status;
@@ -124,7 +123,11 @@ class Membership {
       cancelledAt = json['cancelledAt'] == null
           ? null
           : DateTime.parse(text(json, 'cancelledAt')),
-      cancellationReason = optionalText(json, 'cancellationReason') {
+      cancellationReason = optionalText(json, 'cancellationReason'),
+      frozenDays = json['frozenDays'] is int ? json['frozenDays'] as int : 0,
+      discountPaise = json['discountPaise'] is int
+          ? json['discountPaise'] as int
+          : 0 {
     if (!['active', 'expired', 'cancelled'].contains(status) ||
         durationDays < 1) {
       throw const FormatException('Invalid membership.');
@@ -133,6 +136,9 @@ class Membership {
   final String id, planId, planName, status;
   final String? previousId, cancellationReason;
   final int durationDays, pricePaise;
+
+  /// Days added to the end date by freezes, and money taken off the price.
+  final int frozenDays, discountPaise;
   final CalendarDate startDate, endDate;
   final bool currentlyActive;
   final MembershipPayments? payments;
@@ -166,14 +172,6 @@ class MembershipDetail {
       payments = MembershipPayments.fromJson(object(json['paymentSummary']));
   final Membership subscription;
   final MembershipPayments payments;
-}
-
-class MemberBranch {
-  MemberBranch.fromJson(Map<String, dynamic> json)
-    : id = text(json, 'id'),
-      name = text(json, 'name'),
-      status = text(json, 'status');
-  final String id, name, status;
 }
 
 class AssignedTrainer {
@@ -219,34 +217,9 @@ class CurrentMembershipPayments {
   final int pricePaise, paidPaise, balancePaise, count;
 }
 
-class MemberVisit {
-  MemberVisit.fromJson(Map<String, dynamic> json)
-    : id = text(json, 'id'),
-      status = text(json, 'status'),
-      checkInAt = DateTime.parse(text(json, 'checkInAt')),
-      checkOutAt = json['checkOutAt'] == null
-          ? null
-          : DateTime.parse(text(json, 'checkOutAt'));
-  final String id, status;
-  final DateTime checkInAt;
-  final DateTime? checkOutAt;
-}
-
-class MemberAttendanceSummary {
-  MemberAttendanceSummary.fromJson(Map<String, dynamic> json)
-    : visits = integer(json, 'totalCompletedVisits'),
-      checkedIn = boolean(json, 'currentlyCheckedIn'),
-      latest = optionalObject(json['latestAttendance'], MemberVisit.fromJson),
-      current = optionalObject(json['currentAttendance'], MemberVisit.fromJson);
-  final int visits;
-  final bool checkedIn;
-  final MemberVisit? latest, current;
-}
-
 class MemberSummary {
   MemberSummary.fromJson(Map<String, dynamic> json)
     : member = MemberProfile.fromJson(object(json['member'])),
-      branch = optionalObject(json['currentBranch'], MemberBranch.fromJson),
       trainers = items(json['currentTrainers'], AssignedTrainer.fromJson),
       currentSubscription = optionalObject(
         json['currentSubscription'],
@@ -263,17 +236,12 @@ class MemberSummary {
       currentPayments = optionalObject(
         json['currentSubscriptionPaymentSummary'],
         CurrentMembershipPayments.fromJson,
-      ),
-      attendance = MemberAttendanceSummary.fromJson(
-        object(json['attendanceSummary']),
       );
   final MemberProfile member;
-  final MemberBranch? branch;
   final List<AssignedTrainer> trainers;
   final Membership? currentSubscription;
   final List<Membership> history;
   final Pagination historyPagination;
   final MemberPaymentSummary payments;
   final CurrentMembershipPayments? currentPayments;
-  final MemberAttendanceSummary attendance;
 }

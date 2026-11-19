@@ -1,5 +1,10 @@
 import '../photos/member_photo_widgets.dart';
+import '../../visits/member_visit_widgets.dart';
+import '../../member_app/member_access.dart';
+import '../../personal_training/pt.dart';
+import '../../personal_training/pt_widgets.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
@@ -11,13 +16,20 @@ import '../../memberships/presentation/billing_components.dart'
     show FinancialRefreshStatus;
 import 'member_details_cards.dart';
 import 'member_details_financial_cards.dart';
-import 'member_pay_now.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../models/member_models.dart';
 import '../providers/member_providers.dart';
 import 'member_components.dart';
 import '../../memberships/presentation/billing_components.dart'
     show membershipPath;
+
+// Observe existing state directly so route resumption does not add a second
+// asynchronous provider layer. Never format with stale gym metadata on refresh.
+final _verifiedGymTimezone = dashboardProvider.select(
+  (state) => state.isLoading || state.hasError
+      ? null
+      : state.asData?.value?.period.timezone,
+);
 
 class MemberDetailsPage extends ConsumerStatefulWidget {
   const MemberDetailsPage({
@@ -51,6 +63,7 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
     final gym = ref.watch(adminGymProvider);
     if (gym == null) return const SizedBox.shrink();
     if (gym.gymId != widget.gymId) return const MemberContextChanged();
+    final timezone = ref.watch(_verifiedGymTimezone);
     final scope = scopeFor(gym, widget.memberId);
     final repository = ref.watch(memberRepositoryProvider);
     if (_scope != scope || !identical(_repository, repository)) {
@@ -96,14 +109,6 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
             : AppSpacing.lg;
         return Scaffold(
           backgroundColor: Colors.transparent,
-          bottomNavigationBar: data == null
-              ? null
-              : MemberPayNow(
-                  key: ValueKey((scope, repository)),
-                  scope: scope,
-                  member: data.member,
-                  profileVerified: verified,
-                ),
           body: RefreshIndicator(
             onRefresh: refresh,
             child: ListView(
@@ -178,7 +183,19 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
                     key: ValueKey((scope, repository)),
                     scope: scope,
                     summary: data,
+                    profileVerified: verified,
+                    timezone: timezone,
                   ),
+                  MemberVisitsCard(member: data.member),
+                  MemberAppAccessCard(gymId: scope.gymId, member: data.member),
+                  MemberPtCard(
+                    member: PtPerson.fromJson({
+                      'id': data.member.id,
+                      'name': data.member.name,
+                      'memberCode': data.member.memberCode,
+                    }),
+                  ),
+                  MemberPersonalDetails(member: data.member),
                   MemberSupportCards(summary: data),
                   _MembershipHistory(
                     request: request,
@@ -227,8 +244,9 @@ class _MembershipHistoryState extends ConsumerState<_MembershipHistory> {
     return ProfileSection(
       title: 'Membership history',
       icon: Icons.history_outlined,
-      subtitle: 'Previous memberships and saved payment balances',
+      subtitle: 'All saved memberships, including the current plan',
       tone: AppTone.plan,
+      card: false,
       children: [
         if (history != null && !verified)
           FinancialRefreshStatus(
@@ -322,6 +340,10 @@ class MembershipInspection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(membershipDetailProvider(request));
+    final gym = ref.watch(adminGymProvider);
+    final timezone = matchesScope(gym, request.scope)
+        ? ref.watch(_verifiedGymTimezone)
+        : null;
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -353,7 +375,7 @@ class MembershipInspection extends ConsumerWidget {
               Text('Balance: ${formatInrPaise(detail.payments.balancePaise)}'),
               if (detail.subscription.cancelledAt != null)
                 Text(
-                  'Cancelled: ${formatPaymentDateTime(MaterialLocalizations.of(context), detail.subscription.cancelledAt!, timezone: 'UTC')}',
+                  'Cancelled: ${formatPaymentDateTime(MaterialLocalizations.of(context), detail.subscription.cancelledAt!, timezone: timezone)}',
                 ),
               if (detail.subscription.cancellationReason != null)
                 Text('Reason: ${detail.subscription.cancellationReason}'),

@@ -27,7 +27,7 @@ class CalendarDate implements Comparable<CalendarDate> {
   int compareTo(CalendarDate other) => value.compareTo(other.value);
 }
 
-/// All-branch query for M27. No date means the backend's gym-local today.
+/// Whole-gym query. No date means the backend's gym-local today.
 /// Future filters belong here; widgets never construct endpoint parameters.
 enum DashboardDateFilter { today, last7Days, thisMonth, customRange }
 
@@ -100,7 +100,7 @@ class DashboardPeriod {
       to = CalendarDate.parse(_text(json, 'to')),
       startUtc = DateTime.parse(_text(json, 'startUtc')),
       endUtc = DateTime.parse(_text(json, 'endUtc')),
-      branchId = json['branchId'] as String? {
+      legacyBranchId = json['branchId'] as String? {
     if (from.compareTo(to) > 0 ||
         !startUtc.isUtc ||
         !endUtc.isUtc ||
@@ -115,7 +115,9 @@ class DashboardPeriod {
 
   /// Exclusive UTC bound resolved by the backend from inclusive local dates.
   final DateTime endUtc;
-  final String? branchId;
+
+  /// Transition-only marker: reject branch-narrowed results from an old API.
+  final String? legacyBranchId;
 }
 
 class ProfileMetrics {
@@ -123,8 +125,14 @@ class ProfileMetrics {
     : total = _count(json, 'total'),
       active = _count(json, 'active'),
       inactive = _count(json, 'inactive'),
-      suspended = _count(json, 'suspended');
+      suspended = _count(json, 'suspended'),
+      joinedInPeriod = json['joinedInPeriod'] == null
+          ? null
+          : _count(json, 'joinedInPeriod');
   final int total, active, inactive, suspended;
+
+  /// Members created in the selected period. Null from servers without it.
+  final int? joinedInPeriod;
 }
 
 class SubscriptionMetrics {
@@ -146,29 +154,49 @@ class PaymentMetrics {
   final int outstandingAmountPaise;
 }
 
-class AttendanceMetrics {
-  AttendanceMetrics.fromJson(Map<String, dynamic> json)
-    : periodVisits = _count(json, 'periodVisits'),
-      periodUniqueMembers = _count(json, 'periodUniqueMembers'),
-      currentlyCheckedIn = _count(json, 'currentlyCheckedIn');
-  final int periodVisits, periodUniqueMembers, currentlyCheckedIn;
+/// Spending and profit for the period; absent from servers without expenses.
+class ExpenseMetrics {
+  ExpenseMetrics.fromJson(Map<String, dynamic> json)
+    : periodAmountPaise = _count(json, 'periodAmountPaise'),
+      profitPaise = json['profitPaise'] is int
+          ? json['profitPaise'] as int
+          : throw const FormatException('Invalid profit.');
+  final int periodAmountPaise;
+
+  /// Collected minus spent; negative is a loss.
+  final int profitPaise;
+}
+
+/// Check-ins; absent from servers without visit tracking.
+class VisitMetrics {
+  VisitMetrics.fromJson(Map<String, dynamic> json)
+    : periodCount = _count(json, 'periodCount'),
+      distinctMembers = _count(json, 'distinctMembers'),
+      today = _count(json, 'today');
+  final int periodCount, distinctMembers, today;
 }
 
 class GymDashboard {
   GymDashboard.fromJson(Map<String, dynamic> json)
-    : period = DashboardPeriod.fromJson(_object(json['period'])),
+    : expenses = json['expenses'] == null
+          ? null
+          : ExpenseMetrics.fromJson(_object(json['expenses'])),
+      visits = json['visits'] == null
+          ? null
+          : VisitMetrics.fromJson(_object(json['visits'])),
+      period = DashboardPeriod.fromJson(_object(json['period'])),
       members = ProfileMetrics.fromJson(_object(json['members'])),
       trainers = ProfileMetrics.fromJson(_object(json['trainers'])),
       subscriptions = SubscriptionMetrics.fromJson(
         _object(json['subscriptions']),
       ),
-      payments = PaymentMetrics.fromJson(_object(json['payments'])),
-      attendance = AttendanceMetrics.fromJson(_object(json['attendance']));
+      payments = PaymentMetrics.fromJson(_object(json['payments']));
   final DashboardPeriod period;
   final ProfileMetrics members, trainers;
   final SubscriptionMetrics subscriptions;
   final PaymentMetrics payments;
-  final AttendanceMetrics attendance;
+  final VisitMetrics? visits;
+  final ExpenseMetrics? expenses;
   bool get isEmpty =>
       members.total == 0 &&
       trainers.total == 0 &&
@@ -177,8 +205,5 @@ class GymDashboard {
       subscriptions.expired == 0 &&
       payments.periodSuccessfulAmountPaise == 0 &&
       payments.periodSuccessfulCount == 0 &&
-      payments.outstandingAmountPaise == 0 &&
-      attendance.periodVisits == 0 &&
-      attendance.periodUniqueMembers == 0 &&
-      attendance.currentlyCheckedIn == 0;
+      payments.outstandingAmountPaise == 0;
 }

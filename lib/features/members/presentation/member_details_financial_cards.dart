@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/design_tokens.dart';
+import '../../../shared/formatting/inr.dart';
 import '../../memberships/data/billing_failure.dart';
 import '../../memberships/data/outstanding_dues_repository.dart';
 import '../../memberships/models/membership_eligibility.dart';
@@ -30,6 +31,7 @@ class MemberCurrentMembershipCard extends ConsumerWidget {
         !state.isLoading && !state.hasError && state.asData?.value != null;
     final blocker = verified ? blockingMembership(state.asData!.value!) : null;
     final membership = summary.currentSubscription ?? blocker;
+    final previous = summary.history.firstOrNull;
     final currentMoney = currentMembershipBalance(summary) == null
         ? null
         : summary.currentPayments;
@@ -50,8 +52,8 @@ class MemberCurrentMembershipCard extends ConsumerWidget {
         : null;
     return ProfileSection(
       title: 'Current membership',
+      compactHeader: true,
       icon: Icons.card_membership_outlined,
-      subtitle: 'Saved plan, dates and membership balance',
       tone: AppTone.neutral,
       children: [
         if (summary.currentSubscription == null) ...[
@@ -59,15 +61,50 @@ class MemberCurrentMembershipCard extends ConsumerWidget {
           if (membership != null) ...[
             const SizedBox(height: AppSpacing.sm),
             const Text(
-              'An unexpired or upcoming membership is already saved. Purchase and renewal are blocked until its end date.',
+              'An upcoming membership is already saved. Purchase and renewal remain blocked until its end date.',
+            ),
+          ] else if (verified && previous?.status == 'expired') ...[
+            const SizedBox(height: AppSpacing.sm),
+            const StatusPill(
+              label: 'Membership expired',
+              tone: AppTone.neutral,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Review membership history for renewal. Any unpaid balance is still shown below.',
+            ),
+          ] else if (verified && previous?.status == 'cancelled') ...[
+            const SizedBox(height: AppSpacing.sm),
+            const StatusPill(
+              label: 'Previous membership cancelled',
+              tone: AppTone.neutral,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Open membership history to review the cancellation details.',
+            ),
+          ] else if (verified && state.asData!.value!.isEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Choose a plan to start this member’s first membership.',
             ),
           ],
         ],
         if (membership != null) ...[
           const SizedBox(height: AppSpacing.md),
-          SavedMembershipSummary(membership: membership),
-          const SizedBox(height: AppSpacing.md),
-          MemberAmounts(paidPaise: paid, balancePaise: due),
+          SavedMembershipSummary(
+            membership: membership,
+            compact: true,
+            emphasizeDuration: true,
+          ),
+          const Divider(height: AppSpacing.xl),
+          MemberAmounts(
+            paidPaise: paid,
+            balancePaise: due,
+            compact: true,
+            paidLabel: 'Paid for this plan',
+            dueLabel: 'Due for this plan',
+          ),
           if (due == null)
             const Text(
               'Balance unavailable. Refresh to verify membership payments.',
@@ -97,8 +134,7 @@ class MemberCurrentMembershipCard extends ConsumerWidget {
             blocker == null &&
             verified &&
             profileVerified)
-          FilledButton.icon(
-            style: AppButtonStyles.primary(context),
+          OutlinedButton.icon(
             onPressed: () =>
                 context.push(membershipPath(scope, purchase: true)),
             icon: const Icon(Icons.add),
@@ -118,9 +154,13 @@ class MemberPaymentSummaryCard extends ConsumerStatefulWidget {
     super.key,
     required this.scope,
     required this.summary,
+    this.profileVerified = true,
+    this.timezone,
   });
   final MemberScope scope;
   final MemberSummary summary;
+  final bool profileVerified;
+  final String? timezone;
   @override
   ConsumerState<MemberPaymentSummaryCard> createState() =>
       _MemberPaymentSummaryCardState();
@@ -160,36 +200,55 @@ class _MemberPaymentSummaryCardState
     final fresh = verified && invalid == null;
     return ProfileSection(
       title: 'Payment summary',
+      compactHeader: true,
       icon: Icons.account_balance_wallet_outlined,
-      subtitle: 'Successful payments and current unpaid balances',
       tone: AppTone.neutral,
+      // The balance is the main block of this screen.
+      card: true,
       children: [
-        MemberAmounts(
-          paidLabel: 'Total paid',
-          paidPaise: widget.summary.payments.totalPaise,
-          dueLabel: fresh
+        Text(
+          fresh
               ? 'Current outstanding'
               : _verifiedDues == null
               ? 'Outstanding balance'
               : 'Last verified dues',
-          balancePaise: _verifiedDues,
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          _verifiedDues == null
+              ? 'Unavailable'
+              : formatInrPaise(_verifiedDues!),
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontFamily: 'Inter',
+            color: _verifiedDues != null && _verifiedDues! > 0
+                ? PendingColors.accentFor(Theme.of(context).brightness)
+                : Theme.of(context).colorScheme.onSurface,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          'Paid includes successful payment history. Dues include all non-cancelled unpaid memberships.',
+          fresh && _verifiedDues == 0
+              ? 'No outstanding dues across non-cancelled memberships.'
+              : 'Across all unpaid, non-cancelled memberships — including expired plans.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          'Successful payments: ${widget.summary.payments.count}',
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
         if (!fresh && _verifiedDues != null)
-          const Text(
-            'Refresh in progress or unavailable. The displayed dues are the last verified amount.',
+          const Padding(
+            padding: EdgeInsets.only(top: AppSpacing.sm),
+            child: Text(
+              'Refresh in progress or unavailable. The displayed dues are the last verified amount.',
+            ),
           ),
-        // Secondary recovery entries share the canonical collection controller
-        // with the floating action and the existing receipt sheet.
+        const SizedBox(height: AppSpacing.md),
+        MemberPayNow(
+          key: ValueKey(widget.scope),
+          scope: widget.scope,
+          member: widget.summary.member,
+          profileVerified: widget.profileVerified,
+        ),
+        // Recovery stays beside the balance and canonical collection control.
         MemberPaymentRecovery(
           scope: widget.scope,
           member: widget.summary.member,
@@ -201,7 +260,26 @@ class _MemberPaymentSummaryCardState
           ),
         ],
         const Divider(height: AppSpacing.xl),
-        MemberLatestPayment(payments: widget.summary.payments),
+        Wrap(
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('Total paid', style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              formatInrPaise(widget.summary.payments.totalPaise),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+        Text(
+          'Successful payments: ${widget.summary.payments.count}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        MemberLatestPayment(
+          payments: widget.summary.payments,
+          timezone: widget.timezone,
+        ),
         TextButton.icon(
           onPressed: () => context.push(membershipPath(widget.scope)),
           icon: const Icon(Icons.history),

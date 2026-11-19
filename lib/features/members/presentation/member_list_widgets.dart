@@ -1,3 +1,4 @@
+import '../../../shared/widgets/titanium_surface.dart';
 import '../photos/member_photo_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import '../../../shared/formatting/inr.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/widgets/soft_panel.dart';
 import '../../../shared/widgets/membership_date_range.dart';
+import '../../memberships/models/membership_eligibility.dart';
 import '../models/member_models.dart';
 
 String memberStatusLabel(MemberStatus status) => switch (status) {
@@ -131,8 +133,7 @@ class StatusPill extends StatelessWidget {
 
 String membershipStatusLabel(Membership membership) =>
     switch (membership.status) {
-      'active' =>
-        membership.currentlyActive ? 'Active' : 'Active · Not current',
+      'active' => membership.currentlyActive ? 'Active' : 'Upcoming',
       'expired' => 'Expired',
       'cancelled' => 'Cancelled',
       _ => 'Unavailable',
@@ -277,12 +278,23 @@ class MemberDirectoryCard extends StatelessWidget {
         : verified && data?.currentSubscription?.currentlyActive == true
         ? data!.currentSubscription
         : null;
-    final previous = records != null
+    // A scheduled server-active period is not a current membership, but must
+    // not be presented as an absence of membership either.
+    final upcoming = current == null && verified
+        ? blockingMembership(
+            (records ?? data!.history).where(
+              (record) => !record.currentlyActive,
+            ),
+          )
+        : null;
+    final previous = upcoming != null
+        ? null
+        : records != null
         ? _expiredDirectoryMembership(records, current)
         : verified
         ? expiredDirectoryMembership(data)
         : null;
-    final membership = current ?? previous;
+    final membership = current ?? upcoming ?? previous;
     final detail =
         previousDetails?.isLoading == false &&
             previousDetails?.hasError == false
@@ -333,6 +345,8 @@ class MemberDirectoryCard extends StatelessWidget {
         : null;
     final status = !verified || membership == null
         ? null
+        : upcoming != null
+        ? StatusPill(label: membershipStatusLabel(upcoming), tone: AppTone.plan)
         : previous != null
         ? Semantics(
             label: 'Expired previous membership. No current membership.',
@@ -349,6 +363,12 @@ class MemberDirectoryCard extends StatelessWidget {
       children: [
         Text(member.name, style: theme.textTheme.titleMedium),
         const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Member code: ${member.memberCode}',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (status != null) ...[status, const SizedBox(height: AppSpacing.sm)],
         // Complete dues come from verified balances across every history page.
         if (dueAmount != null) ...[
           dueAmount,
@@ -364,7 +384,7 @@ class MemberDirectoryCard extends StatelessWidget {
         ] else if (membership == null)
           const StatusPill(label: 'No membership')
         else ...[
-          if (dueAmount == null && (balance == null || previous != null)) ...[
+          if (dueAmount == null && (balance == null || current == null)) ...[
             if (balance == 0)
               Text('No balance due', style: amountStyle)
             else
@@ -375,7 +395,6 @@ class MemberDirectoryCard extends StatelessWidget {
             start: membership.startDate.value,
             end: membership.endDate.value,
             previous: previous != null,
-            singleLine: true,
           ),
           if (previousDetails?.isLoading == true)
             const LinearProgressIndicator()
@@ -390,63 +409,56 @@ class MemberDirectoryCard extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      label: 'View profile for ${member.name}',
-      child: Card(
-        color: color,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Stack(
-                children: [
-                  MemberPortrait(member: member, prominent: true),
-                  if (current != null)
-                    Positioned(
-                      top: AppSpacing.sm,
-                      right: AppSpacing.sm,
-                      child: Semantics(
-                        container: true,
-                        label: 'Active membership',
-                        child: Tooltip(
-                          message: 'Active membership',
-                          excludeFromSemantics: true,
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: AppSurfaces.of(
-                                context,
-                              ).onAccent(AppTone.positive),
-                              border: Border.all(
-                                color: theme.colorScheme.surface,
-                                width: 2,
+      label:
+          'View profile for ${member.name}. Member code: ${member.memberCode}.',
+      child: TitaniumPress(
+        child: Card(
+          color: color,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Stack(
+                  children: [
+                    MemberPortrait(member: member, prominent: true),
+                    if (current != null)
+                      Positioned(
+                        top: AppSpacing.sm,
+                        right: AppSpacing.sm,
+                        child: Semantics(
+                          container: true,
+                          label: 'Active membership',
+                          child: Tooltip(
+                            message: 'Active membership',
+                            excludeFromSemantics: true,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppSurfaces.of(
+                                  context,
+                                ).onAccent(AppTone.positive),
+                                border: Border.all(
+                                  color: theme.colorScheme.surface,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  if (status != null)
-                    Positioned(
-                      bottom: AppSpacing.sm,
-                      left: AppSpacing.sm,
-                      right: AppSpacing.sm,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: status,
-                      ),
-                    ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: footer,
-              ),
-            ],
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: footer,
+                ),
+              ],
+            ),
           ),
         ),
       ),

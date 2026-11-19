@@ -10,6 +10,8 @@ class MemberFailure implements Exception {
         ? (data['error'] as Map)['code']
         : null;
     return MemberFailure(switch (code) {
+      'MINOR_MEMBER_WORKFLOW_UNAVAILABLE' =>
+        'Under-18 registration and profile uploads are unavailable until guardian authorization and verification are supported.',
       'DUPLICATE_MEMBER_CODE' =>
         'That member code already exists in this gym. Choose another code.',
       'MEMBER_NOT_FOUND' => 'This member is no longer available in this gym.',

@@ -18,13 +18,11 @@ void main() {
     expect(result.payments.periodSuccessfulAmountPaise, 123456789);
     expect(result.payments.periodSuccessfulCount, 5);
     expect(result.payments.outstandingAmountPaise, 50000);
-    expect(result.attendance.periodVisits, 20);
-    expect(result.attendance.periodUniqueMembers, 10);
-    expect(result.attendance.currentlyCheckedIn, 2);
+
     expect(result.period.timezone, 'Asia/Kolkata');
     expect(result.period.startUtc, DateTime.utc(2026, 2, 28, 18, 30));
     expect(result.period.endUtc, DateTime.utc(2026, 3, 1, 18, 30));
-    expect(result.period.branchId, isNull);
+
     expect(result.isEmpty, isFalse);
   });
   test('all zero metrics are a valid empty response', () {
@@ -55,7 +53,7 @@ void main() {
   }
   test('missing section is rejected instead of inventing zeros', () {
     expect(
-      () => GymDashboard.fromJson(dashboardJson()..remove('attendance')),
+      () => GymDashboard.fromJson(dashboardJson()..remove('payments')),
       throwsFormatException,
     );
   });

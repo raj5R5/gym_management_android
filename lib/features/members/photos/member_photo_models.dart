@@ -22,24 +22,37 @@ String newPhotoOperationKey() {
 }
 
 class MemberPhotoTarget {
-  MemberPhotoTarget(this.scope, {this.memberId}) {
+  MemberPhotoTarget(this.scope, {this.memberId}) : isOwner = false {
     if (memberId != null && !RegExp(r'^[a-f0-9]{24}$').hasMatch(memberId!)) {
       throw const FormatException('Invalid photo member scope.');
     }
   }
+  MemberPhotoTarget.owner(this.scope) : memberId = null, isOwner = true;
+  final bool isOwner;
+  String? get subjectId => isOwner ? scope.userId : memberId;
+  bool get canUpload => isOwner || memberId != null;
   factory MemberPhotoTarget.fromJson(Map<String, dynamic> json) =>
-      MemberPhotoTarget(
-        OnboardingScope.fromJson(
-          Map<String, dynamic>.from(json['scope'] as Map),
-        ),
-        memberId: json['memberId'] as String?,
-      );
+      json['ownerProfile'] == true
+      ? MemberPhotoTarget.owner(
+          OnboardingScope.fromJson(
+            Map<String, dynamic>.from(json['scope'] as Map),
+          ),
+        )
+      : MemberPhotoTarget(
+          OnboardingScope.fromJson(
+            Map<String, dynamic>.from(json['scope'] as Map),
+          ),
+          memberId: json['memberId'] as String?,
+        );
   final OnboardingScope scope;
   final String? memberId;
-  String get key => '${scope.storageKey}.photo.${memberId ?? 'draft'}';
+  String get key => isOwner
+      ? '${scope.storageKey}.owner-photo'
+      : '${scope.storageKey}.photo.${memberId ?? 'draft'}';
   Map<String, dynamic> toJson() => {
     'scope': scope.toJson(),
     'memberId': memberId,
+    if (isOwner) 'ownerProfile': true,
   };
   @override
   bool operator ==(Object other) =>
@@ -110,7 +123,7 @@ class PendingMemberPhoto {
 
 class MemberPhotoReceipt {
   MemberPhotoReceipt.fromJson(Map<String, dynamic> json)
-    : memberId = json['memberId'] as String,
+    : memberId = (json['memberId'] ?? json['userId']) as String,
       url = json['photoUrl'] as String?,
       revision = json['photoRevision'] as int,
       state = json['state'] as String?;

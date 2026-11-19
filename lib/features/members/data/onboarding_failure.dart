@@ -24,6 +24,11 @@ enum OnboardingFailureKind {
 /// The status and category are part of the contract, not inferred from a 4xx.
 enum OnboardingBackendCode {
   validationError('VALIDATION_ERROR', 400, OnboardingFailureKind.validation),
+  minorWorkflowUnavailable(
+    'MINOR_MEMBER_WORKFLOW_UNAVAILABLE',
+    409,
+    OnboardingFailureKind.validation,
+  ),
   invalidJson('INVALID_JSON', 400, OnboardingFailureKind.validation),
   paymentMemberMismatch(
     'PAYMENT_MEMBER_MISMATCH',
@@ -160,6 +165,8 @@ class OnboardingDiagnostics {
   final String? code, serverMessage;
 
   static const _publicMessages = <String, String>{
+    'MINOR_MEMBER_WORKFLOW_UNAVAILABLE':
+        'Under-18 registration, profile changes and photo uploads are unavailable until guardian authorization and verification are supported.',
     'INVALID_JSON': 'Request body must contain valid JSON.',
     'PAYLOAD_TOO_LARGE': 'Request body exceeds the allowed size.',
     'UNSUPPORTED_ENCODING': 'Request encoding is not supported.',

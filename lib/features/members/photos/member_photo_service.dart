@@ -125,8 +125,9 @@ class MemberPhotoService {
   Future<void> _saveSelection(
     MemberPhotoTarget target,
     Uint8List bytes,
-    int expected,
-  ) async {
+    int expected, {
+    String? operationKey,
+  }) async {
     await _validate(bytes);
     _guard(target, expected);
     final old = await store.read(target);
@@ -140,7 +141,7 @@ class MemberPhotoService {
     _guard(target, expected);
     final saved = PendingMemberPhoto(
       target: target,
-      operationKey: newPhotoOperationKey(),
+      operationKey: operationKey ?? newPhotoOperationKey(),
       remove: false,
       fileName: name,
       registrationKeys: old?.registrationKeys ?? const [],
@@ -212,6 +213,19 @@ class MemberPhotoService {
     }
   }
 
+  Future<void> stageBytes(
+    MemberPhotoTarget target,
+    Uint8List bytes, {
+    String? operationKey,
+  }) async {
+    final expected = revision();
+    _guard(target, expected);
+    if (_picking || _requests.containsKey(target.key)) {
+      throw const MemberPhotoFailure('Finish the current photo action first.');
+    }
+    await _saveSelection(target, bytes, expected, operationKey: operationKey);
+  }
+
   Future<PendingMemberPhoto> stageRemoval(MemberPhotoTarget target) async {
     final expected = revision();
     _guard(target, expected);
@@ -255,7 +269,7 @@ class MemberPhotoService {
   ) async {
     final expected = revision();
     _guard(target, expected);
-    if (target.memberId == null) {
+    if (!target.canUpload) {
       throw const MemberPhotoFailure(
         'The member must be confirmed before uploading a photo.',
       );

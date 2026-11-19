@@ -1,3 +1,23 @@
+import 'package:gym_management_app/features/owner_profile/owner_profile.dart';
+import 'package:gym_management_app/features/leads/leads.dart';
+import 'package:gym_management_app/features/members/birthdays.dart';
+import '../leads/lead_fakes.dart';
+import 'package:gym_management_app/features/adjustments/adjustments.dart';
+import 'package:gym_management_app/features/adjustments/adjustment_widgets.dart';
+import '../money/adjustment_fakes.dart';
+import 'package:gym_management_app/features/expenses/expenses.dart';
+import '../money/expense_fakes.dart';
+import 'package:gym_management_app/features/gym_settings/gym_settings_page.dart';
+import 'package:gym_management_app/features/visits/visit_repository.dart';
+import '../visits/visit_fakes.dart';
+import 'package:gym_management_app/features/members/models/member_overview.dart';
+import 'package:gym_management_app/features/admin_dashboard/presentation/dashboard_widgets.dart';
+import 'package:gym_management_app/features/members/providers/member_overview_providers.dart';
+import 'package:gym_management_app/features/gym_settings/gym_settings.dart';
+import '../gym_settings/gym_settings_fakes.dart';
+import 'package:gym_management_app/features/owner_profile/owner_signup_photo.dart';
+import '../owner_profile/owner_profile_widgets_test.dart'
+    show ProfilesFake, NoSignupPhoto;
 import 'package:gym_management_app/features/members/photos/member_photo_providers.dart';
 import '../members/photo_fakes.dart';
 import 'dart:async';
@@ -42,14 +62,25 @@ void main() {
     bool authenticated = true,
     List<String> gyms = const [gymA],
     bool onboarding = false,
+    bool ownerProfile = false,
     FakeMembershipRepository? plans,
+    FakeGymSettingsRepository? settings,
+    List<Map<String, dynamic>>? overviewRows,
+    FakeVisitRepository? visits,
+    FakeExpenseRepository? expenses,
+    FakeAdjustmentRepository? adjustments,
+    FakeLeadRepository? leads,
+    List<UpcomingBirthday> birthdays = const [],
   }) async {
+    final members = FakeMemberRepository()..empty = overviewRows == null;
     final api = FakeAuthApi()..identity = adminIdentity(gyms: gyms, role: role);
     final scope = ProviderContainer(
       overrides: [
         memberPhotoStoreProvider.overrideWithValue(MemoryMemberPhotoStore()),
         appConfigProvider.overrideWithValue(
-          AppConfig.fromValues(apiBaseUrl: onboarding ? onboardingUrl : ''),
+          AppConfig.fromValues(
+            apiBaseUrl: onboarding || ownerProfile ? onboardingUrl : '',
+          ),
         ),
         if (onboarding) ...[
           memberOnboardingRepositoryProvider.overrideWithValue(
@@ -63,6 +94,10 @@ void main() {
             ),
           ),
         ],
+        if (ownerProfile) ...[
+          ownerProfileRepositoryProvider.overrideWithValue(ProfilesFake()),
+          ownerSignupPhotoStoreProvider.overrideWithValue(NoSignupPhoto()),
+        ],
         authApiServiceProvider.overrideWithValue(api),
         credentialStorageProvider.overrideWithValue(
           FakeCredentialStorage()
@@ -72,9 +107,26 @@ void main() {
         trainerRepositoryProvider.overrideWithValue(
           FakeTrainerRepository()..empty = true,
         ),
-        memberRepositoryProvider.overrideWithValue(
-          FakeMemberRepository()..empty = true,
+        memberRepositoryProvider.overrideWithValue(members),
+        memberOverviewRepositoryProvider.overrideWithValue(
+          FakeMemberOverviewRepository(members, rows: overviewRows),
         ),
+        gymSettingsRepositoryProvider.overrideWithValue(
+          settings ?? FakeGymSettingsRepository(),
+        ),
+        visitRepositoryProvider.overrideWithValue(
+          visits ?? FakeVisitRepository(),
+        ),
+        expenseRepositoryProvider.overrideWithValue(
+          expenses ?? FakeExpenseRepository(),
+        ),
+        adjustmentRepositoryProvider.overrideWithValue(
+          adjustments ?? FakeAdjustmentRepository(),
+        ),
+        leadRepositoryProvider.overrideWithValue(
+          leads ?? FakeLeadRepository(leads: []),
+        ),
+        upcomingBirthdaysProvider.overrideWith((ref) async => birthdays),
         membershipRepositoryProvider.overrideWithValue(
           plans ?? FakeMembershipRepository(),
         ),
@@ -85,11 +137,55 @@ void main() {
       scope.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: scope, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: scope,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pump();
     return scope;
   }
+
+  testWidgets(
+    'owner profile retains unsaved fields across access-token refresh',
+    (tester) async {
+      final scope = await pumpAdmin(
+        tester,
+        FakeDashboardRepository(),
+        ownerProfile: true,
+      );
+      await tester.pumpAndSettle();
+      scope.read(appRouterProvider).go(AppRoutes.ownerProfile);
+      await tester.pumpAndSettle();
+      final name = find.byKey(const ValueKey('profile-displayName'));
+      await tester.enterText(name, 'Unsaved owner');
+      await tester.pump();
+      final api = scope.read(authApiServiceProvider) as FakeAuthApi;
+      api.refreshGate = Completer<void>();
+      final recovery = scope
+          .read(sessionControllerProvider.notifier)
+          .refreshSession();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Restoring your session…'), findsOneWidget);
+      expect(
+        scope.read(appRouterProvider).state.uri.path,
+        AppRoutes.ownerProfile,
+      );
+      api.refreshGate!.complete();
+      await recovery;
+      await tester.pumpAndSettle();
+      expect(
+        scope.read(appRouterProvider).state.uri.path,
+        AppRoutes.ownerProfile,
+      );
+      expect(
+        tester.widget<TextFormField>(name).controller!.text,
+        'Unsaved owner',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   Future<void> reveal(WidgetTester tester, Finder finder) async {
     if (finder.evaluate().isEmpty) {
@@ -135,14 +231,21 @@ void main() {
       );
       expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.text('Whole gym · All branches'), findsNothing);
-      expect(find.text('Current gym · All branches'), findsOneWidget);
+      expect(find.text('Current gym'), findsOneWidget);
       expect(find.text('Welcome back, Admin'), findsNothing);
       expect(find.text('Your gym, at a glance.'), findsNothing);
       expect(find.byType(DropdownButtonFormField<String>), findsNothing);
-      expect(find.text('1 Mar 2026 · Inclusive'), findsOneWidget);
-      expect(find.text('Gym timezone: Asia/Kolkata'), findsOneWidget);
+      expect(find.text('1 Mar 2026 · Inclusive'), findsNothing);
+      expect(
+        tester
+            .widget<Semantics>(find.byKey(const Key('dashboard-period')))
+            .properties
+            .label,
+        contains('1 Mar 2026'),
+      );
+      expect(find.text('Gym timezone: Asia/Kolkata'), findsNothing);
       expect(repository.requests.single.gymId, gymA);
-      await tester.scrollUntilVisible(find.text('Total Revenue'), 250);
+      await tester.scrollUntilVisible(find.text('Money collected'), 250);
       expect(find.text('₹12,34,567.89'), findsOneWidget);
       await reveal(tester, find.text('Active Plans'));
       expect(find.byType(CircularMetricCard), findsNWidgets(4));
@@ -152,9 +255,9 @@ void main() {
           .toList();
       expect(cards.map((card) => card.color), [
         AppPalette.ember,
-        const Color(0xFFA72F35),
-        const Color(0xFF355E9B),
-        const Color(0xFFB3472B),
+        PendingColors.accent,
+        AppPalette.ember,
+        AppPalette.ember,
       ]);
       expect(cards.first.layout, MetricCardLayout.revenueHero);
       expect(
@@ -166,27 +269,27 @@ void main() {
               ),
             )
             .color,
-        AppPalette.darkEmber,
+        AppPalette.ember,
       );
-      expect(cards[1].surfaceTint, const Color(0xFFFBE3DF));
-      expect(cards[1].iconBackground, const Color(0xFFFBE3DF));
+      expect(cards[1].surfaceTint, PendingColors.surface);
+      expect(cards[1].iconBackground, PendingColors.surface);
       final pendingRing = tester.widget<MetricRing>(
         find.descendant(
           of: find.byWidget(cards[1]),
           matching: find.byType(MetricRing),
         ),
       );
-      expect(pendingRing.color, const Color(0xFFA72F35));
+      expect(pendingRing.color, PendingColors.accent);
       expect(
         tester
             .widget<Icon>(
               find.descendant(
                 of: find.byWidget(cards[1]),
-                matching: find.byType(Icon),
+                matching: find.byIcon(Icons.account_balance_wallet_outlined),
               ),
             )
             .color,
-        const Color(0xFFA72F35),
+        PendingColors.accent,
       );
     },
   );
@@ -239,20 +342,17 @@ void main() {
         GymDashboard.fromJson(dashboardJson(empty: true)),
       );
       await tester.pumpAndSettle();
-      await reveal(
-        tester,
-        find.text('No dashboard activity to show. All metrics are zero.'),
-      );
-      expect(
-        find.text('No dashboard activity to show. All metrics are zero.'),
-        findsOneWidget,
-      );
+      // A brand-new gym gets a setup checklist instead of a zero-state panel.
+      await reveal(tester, find.text('Finish setting up'));
+      expect(find.text('2 of 5 done'), findsOneWidget);
+      expect(find.text('Create a membership plan'), findsOneWidget);
+      expect(find.text('Add your first member'), findsOneWidget);
       await scrollToTop(tester);
-      await tester.scrollUntilVisible(find.text('Total Revenue'), 250);
+      await tester.scrollUntilVisible(find.text('Money collected'), 250);
       expect(
         find.descendant(
           of: find.ancestor(
-            of: find.text('Total Revenue'),
+            of: find.text('Money collected'),
             matching: find.byType(CircularMetricCard),
           ),
           matching: find.text('₹0.00'),
@@ -295,15 +395,15 @@ void main() {
         plans: plans,
       );
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('₹1,000.00'), findsOneWidget);
-      await reveal(tester, find.text('Pending Amount'));
+      await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹500.00'), findsOneWidget);
       expect(
         tester
             .widget<CircularMetricCard>(
               find.ancestor(
-                of: find.text('Pending Amount'),
+                of: find.text('Pending dues'),
                 matching: find.byType(CircularMetricCard),
               ),
             )
@@ -317,25 +417,15 @@ void main() {
       await scrollToTop(tester);
       await tester.tap(find.byTooltip('Refresh dashboard'));
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Pending Amount'));
+      await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹250.00'), findsOneWidget);
       expect(find.text('₹500.00'), findsNothing);
-      expect(
-        find.descendant(
-          of: find.ancestor(
-            of: find.text('Active Plans'),
-            matching: find.byType(CircularMetricCard),
-          ),
-          matching: find.text('4'),
-        ),
-        findsOneWidget,
-      );
       repository.result = GymDashboard.fromJson(
         dashboardJson(revenue: 0, outstanding: 75000),
       );
       scope.read(adminGymProvider.notifier).selectGym(gymB);
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Pending Amount'));
+      await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹750.00'), findsOneWidget);
       expect(repository.requests.last.gymId, gymB);
     },
@@ -366,7 +456,7 @@ void main() {
         ..result = GymDashboard.fromJson(response('12', 0, 0));
       final scope = await pumpAdmin(tester, repository);
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('TODAY · 12 OCT 2026'), findsOneWidget);
       expect(find.text('₹0.00'), findsOneWidget);
       expect(find.text('No payments during this period'), findsOneWidget);
@@ -376,7 +466,7 @@ void main() {
           .read(dashboardQueryProvider.notifier)
           .selectRange(CalendarDate(2026, 10, 10), CalendarDate(2026, 10, 10));
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('10 OCT 2026'), findsOneWidget);
       expect(find.text('₹1,000.00'), findsOneWidget);
       expect(find.text('No payments during this period'), findsNothing);
@@ -388,7 +478,7 @@ void main() {
       repository.result = GymDashboard.fromJson(response('12', 0, 0));
       scope.read(dashboardQueryProvider.notifier).useGymToday();
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('TODAY · 12 OCT 2026'), findsOneWidget);
       expect(find.text('₹0.00'), findsOneWidget);
       expect(find.text('₹1,000.00'), findsNothing);
@@ -423,7 +513,14 @@ void main() {
             .selected,
         isTrue,
       );
-      expect(find.text('1 Mar 2026 – 7 Mar 2026 · Inclusive'), findsOneWidget);
+      expect(
+        tester
+            .widget<Semantics>(find.byKey(const Key('dashboard-period')))
+            .properties
+            .label,
+        contains('1 Mar 2026 – 7 Mar 2026'),
+      );
+      expect(find.text('1 Mar 2026 – 7 Mar 2026 · Inclusive'), findsNothing);
       final requests = repository.requests.length;
       await tester.tap(find.text('7 days'));
       await tester.pumpAndSettle();
@@ -475,7 +572,7 @@ void main() {
         find.text('Refresh failed · Showing last successful data'),
         findsOneWidget,
       );
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('₹12,34,567.89'), findsOneWidget);
       expect(find.text('₹500.00'), findsOneWidget);
       repository.gate = Completer<GymDashboard>();
@@ -500,7 +597,7 @@ void main() {
       repository.failure = const AuthFailure(AuthFailureKind.forbidden);
       await tester.tap(find.byTooltip('Refresh dashboard'));
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('₹12,34,567.89'), findsNothing);
       expect(find.text('₹500.00'), findsNothing);
       expect(
@@ -518,7 +615,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Members').last);
     await tester.pumpAndSettle();
-    expect(find.text('No members yet. Add your first member.'), findsOneWidget);
+    expect(find.text('Add your first member'), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(
@@ -532,6 +629,15 @@ void main() {
       findsOneWidget,
     );
     await tester.tap(find.byTooltip('Admin navigation'));
+    await tester.pumpAndSettle();
+    // The drawer lists more pages than fit the test screen.
+    await tester.dragUntilVisible(
+      find.widgetWithText(ListTile, 'More'),
+      find.byType(Drawer),
+      const Offset(0, -200),
+    );
+    // Bring it fully on screen: a tile at the very edge misses the tap.
+    await tester.drag(find.byType(Drawer), const Offset(0, -400));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
@@ -628,7 +734,14 @@ void main() {
       'from': '2026-03-01',
       'to': '2026-03-07',
     });
-    expect(find.text('1 Mar 2026 – 7 Mar 2026 · Inclusive'), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('dashboard-period')))
+          .properties
+          .label,
+      contains('1 Mar 2026 – 7 Mar 2026'),
+    );
+    expect(find.text('1 Mar 2026 – 7 Mar 2026 · Inclusive'), findsNothing);
     repository.result = GymDashboard.fromJson(dashboardJson());
     await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
@@ -681,10 +794,10 @@ void main() {
     },
   );
   for (final action in {
-    'Add member': '${AppRoutes.members}/new',
-    'View members': AppRoutes.members,
-    'View trainers': AppRoutes.trainers,
-    'Membership plans': AppRoutes.plans,
+    'Add member': ('${AppRoutes.members}/new', null),
+    'Collect dues': (AppRoutes.members, MemberOverviewFilter.dues),
+    'Renewals': (AppRoutes.members, MemberOverviewFilter.expired),
+    'Plans': (AppRoutes.plans, null),
   }.entries) {
     testWidgets('quick action ${action.key} opens the existing route', (
       tester,
@@ -695,10 +808,17 @@ void main() {
         onboarding: action.key == 'Add member',
       );
       await tester.pumpAndSettle();
-      await reveal(tester, find.text(action.key));
-      await tester.tap(find.text(action.key));
+      final button = find.descendant(
+        of: find.byType(DashboardQuickActions),
+        matching: find.text(action.key),
+      );
+      await reveal(tester, button);
+      await tester.tap(button);
       await tester.pumpAndSettle();
-      expect(scope.read(appRouterProvider).state.uri.path, action.value);
+      expect(scope.read(appRouterProvider).state.uri.path, action.value.$1);
+      if (action.value.$2 case final filter?) {
+        expect(scope.read(memberOverviewQueryProvider).filter, filter);
+      }
       if (action.key == 'Add member') {
         expect(
           scope.read(appRouterProvider).state.uri.queryParameters['gymId'],
@@ -746,18 +866,19 @@ void main() {
         );
       await pumpAdmin(tester, repository);
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Total Revenue'));
+      await reveal(tester, find.text('Money collected'));
       expect(find.text('₹9,00,71,99,25,47,409.91'), findsOneWidget);
       expect(
         find.descendant(
           of: find.byType(CircularMetricCard),
           matching: find.byType(BackdropFilter),
         ),
-        findsNothing,
+        // Revenue, dues, profit, active members, check-ins and new members.
+        findsNWidgets(6),
       );
-      await reveal(tester, find.text('Pending Amount'));
+      await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹500.00'), findsOneWidget);
-      await reveal(tester, find.text('Active Plans'));
+      await reveal(tester, find.text('New members'));
       await reveal(tester, find.text('Add member'));
       expect(tester.takeException(), isNull);
     },
@@ -771,110 +892,93 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await pumpAdmin(tester, FakeDashboardRepository());
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Total Revenue'), 250);
+    await tester.scrollUntilVisible(find.text('Money collected'), 250);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('revenue hero and three compact cards show exact values', (
-    tester,
-  ) async {
-    final plans = FakeMembershipRepository()..total = 37;
-    await pumpAdmin(tester, FakeDashboardRepository(), plans: plans);
-    await tester.pumpAndSettle();
-    await reveal(tester, find.text('Active Plans'));
-    final expected = {
-      'Total Revenue': '₹12,34,567.89',
-      'Pending Amount': '₹500.00',
-      'Total Members': '12',
-      'Active Plans': '37',
-    };
-    for (final entry in expected.entries) {
-      final card = find.ancestor(
-        of: find.text(entry.key),
+  testWidgets(
+    'Iron Signal revenue, paired metrics and dues show exact values',
+    (tester) async {
+      final plans = FakeMembershipRepository()..total = 37;
+      await pumpAdmin(tester, FakeDashboardRepository(), plans: plans);
+      await tester.pumpAndSettle();
+      await reveal(tester, find.text('Active Plans'));
+      final expected = {
+        'Money collected': '₹12,34,567.89',
+        'Pending dues': '₹500.00',
+        'Total Members': '12',
+        'Active Plans': '37',
+      };
+      for (final entry in expected.entries) {
+        final card = find.ancestor(
+          of: find.text(entry.key),
+          matching: find.byType(CircularMetricCard),
+        );
+        expect(card, findsOneWidget);
+        expect(
+          find.descendant(of: card, matching: find.text(entry.value)),
+          findsOneWidget,
+        );
+      }
+      final rings = tester
+          .widgetList<MetricRing>(find.byType(MetricRing))
+          .toList();
+      expect(rings.map((ring) => ring.color), [
+        AppPalette.ember,
+        DashboardAccents.pending,
+        DashboardAccents.members,
+        DashboardAccents.plans,
+      ]);
+      final revenue = find.ancestor(
+        of: find.text('Money collected'),
         matching: find.byType(CircularMetricCard),
       );
-      expect(card, findsOneWidget);
-      expect(
-        find.descendant(of: card, matching: find.text(entry.value)),
-        findsOneWidget,
+      final pending = find.ancestor(
+        of: find.text('Pending dues'),
+        matching: find.byType(CircularMetricCard),
       );
-    }
-    final rings = tester
-        .widgetList<MetricRing>(find.byType(MetricRing))
-        .toList();
-    expect(rings.map((ring) => ring.color), [
-      AppPalette.darkEmber,
-      DashboardAccents.pending,
-      DashboardAccents.members,
-      DashboardAccents.plans,
-    ]);
-    final revenue = find.ancestor(
-      of: find.text('Total Revenue'),
-      matching: find.byType(CircularMetricCard),
-    );
-    final pending = find.ancestor(
-      of: find.text('Pending Amount'),
-      matching: find.byType(CircularMetricCard),
-    );
-    expect(
-      tester.getTopLeft(revenue).dy,
-      lessThan(tester.getTopLeft(pending).dy),
-    );
-    expect(
-      tester.getSize(revenue).width,
-      greaterThan(tester.getSize(pending).width),
-    );
-    expect(plans.operations, ['plans:$gymA:1']);
-    expect(tester.takeException(), isNull);
-  });
+      expect(
+        tester.getTopLeft(revenue).dy,
+        lessThan(tester.getTopLeft(pending).dy),
+      );
+      expect(
+        tester.getSize(revenue).width,
+        equals(tester.getSize(pending).width),
+      );
+      expect(plans.operations, ['plans:$gymA:1']);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
-    'plan failure preserves financial metrics and offers an independent retry',
+    'plan failure keeps financial metrics and hides a half-known checklist',
     (tester) async {
       final plans = FakeMembershipRepository()
         ..failure = const BillingFailure('Plans unavailable.');
       final repository = FakeDashboardRepository();
       await pumpAdmin(tester, repository, plans: plans);
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Retry plans'));
-      expect(find.text('Plans unavailable.'), findsOneWidget);
+      await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹500.00'), findsOneWidget);
-      plans.failure = null;
-      plans.total = 6;
-      await tester.tap(find.text('Retry plans'));
-      await tester.pumpAndSettle();
-      expect(find.text('6'), findsOneWidget);
+      expect(find.text('Finish setting up'), findsNothing);
       expect(repository.requests, hasLength(1));
-      expect(plans.operations, ['plans:$gymA:1', 'plans:$gymA:1']);
     },
   );
 
   testWidgets(
-    'plan count loading remains a placeholder alongside real dashboard metrics',
+    'setup checklist waits for the plan count, then lists missing steps',
     (tester) async {
       final plans = FakeMembershipRepository()
         ..planGate = Completer<BillingPage<MembershipPlan>>();
       await pumpAdmin(tester, FakeDashboardRepository(), plans: plans);
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Active Plans'));
-      final card = find.ancestor(
-        of: find.text('Active Plans'),
-        matching: find.byType(CircularMetricCard),
-      );
-      expect(
-        find.descendant(of: card, matching: find.text('—')),
-        findsOneWidget,
-      );
-      expect(find.descendant(of: card, matching: find.text('0')), findsNothing);
+      expect(find.text('Finish setting up'), findsNothing);
+      await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹500.00'), findsOneWidget);
-      expect(tester.binding.hasScheduledFrame, isFalse);
-      plans.planGate!.complete(
-        BillingPage([MembershipPlan.fromJson(planJson())], pagination(1, 37)),
-      );
+      plans.planGate!.complete(BillingPage([], pagination(1, 0)));
       await tester.pumpAndSettle();
-      expect(
-        find.descendant(of: card, matching: find.text('37')),
-        findsOneWidget,
-      );
+      await scrollToTop(tester);
+      expect(find.text('Finish setting up'), findsOneWidget);
+      expect(find.text('Create a membership plan'), findsOneWidget);
       expect(plans.operations, ['plans:$gymA:1']);
     },
   );
@@ -907,44 +1011,60 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final size in [const Size(360, 740), const Size(393, 820)]) {
-      testWidgets('summary fits before scrolling at $size in $brightness', (
-        tester,
-      ) async {
-        tester.view.physicalSize = size;
-        tester.view.devicePixelRatio = 1;
-        tester.view.padding = FakeViewPadding(top: 24, bottom: 24);
-        tester.platformDispatcher.platformBrightnessTestValue = brightness;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        addTearDown(tester.view.resetPadding);
-        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-        await pumpAdmin(tester, FakeDashboardRepository());
-        await tester.pumpAndSettle();
-        final bar = tester.getRect(find.byType(NavigationBar));
-        final cards = find.byType(CircularMetricCard);
-        expect(cards, findsNWidgets(4));
-        final metrics = [
-          for (var i = 1; i < 4; i++) tester.getRect(cards.at(i)),
-        ];
-        expect(metrics.map((r) => r.top).toSet(), hasLength(1));
-        expect(metrics.map((r) => r.height).toSet(), hasLength(1));
-        for (final rect in metrics) {
-          expect(rect.bottom, lessThan(bar.top));
-          expect(rect.left, greaterThanOrEqualTo(0));
-          expect(rect.right, lessThanOrEqualTo(size.width));
-        }
-        expect(tester.getRect(cards.first).bottom, lessThan(metrics.first.top));
-        expect(find.byType(MetricRing), findsNWidgets(4));
-        expect(
-          find.byKey(const Key('dashboard-period')).hitTestable(),
-          findsOneWidget,
-        );
-        expect(
-          find.text('Gym timezone: Asia/Kolkata').hitTestable(),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      });
+      testWidgets(
+        'Iron Signal summary hierarchy and scroll clearance at $size in $brightness',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          tester.view.padding = FakeViewPadding(top: 24, bottom: 24);
+          tester.platformDispatcher.platformBrightnessTestValue = brightness;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetPadding);
+          addTearDown(
+            tester.platformDispatcher.clearPlatformBrightnessTestValue,
+          );
+          await pumpAdmin(tester, FakeDashboardRepository());
+          await tester.pumpAndSettle();
+          final bar = tester.getRect(find.byType(NavigationBar));
+          final cards = find.byType(CircularMetricCard);
+          expect(cards, findsNWidgets(4));
+          final revenue = tester.getRect(cards.first);
+          final pending = tester.getRect(cards.at(1));
+          final members = tester.getRect(cards.at(2));
+          final plans = tester.getRect(cards.at(3));
+          expect(revenue.bottom, lessThan(pending.top));
+          expect(pending.bottom, lessThan(members.top));
+          expect(members.top, plans.top);
+          expect(members.height, plans.height);
+          expect(members.bottom, greaterThan(pending.bottom));
+          expect(pending.width, revenue.width);
+          expect(revenue.bottom, lessThan(bar.top));
+          for (final rect in [revenue, members, plans, pending]) {
+            expect(rect.left, greaterThanOrEqualTo(0));
+            expect(rect.right, lessThanOrEqualTo(size.width));
+          }
+          expect(find.byType(MetricRing), findsNWidgets(4));
+          expect(
+            find.widgetWithText(ChoiceChip, 'Today').hitTestable(),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Gym timezone: Asia/Kolkata').hitTestable(),
+            findsNothing,
+          );
+          // The approved plate header makes this a scrollable overview. All dues
+          // content and its action must be reachable above the fixed native tabs.
+          await Scrollable.ensureVisible(
+            tester.element(cards.at(1)),
+            alignment: .5,
+          );
+          await tester.pumpAndSettle();
+          expect(tester.getRect(cards.at(1)).bottom, lessThan(bar.top));
+          expect(find.text('View dues').hitTestable(), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   }
 
@@ -967,7 +1087,7 @@ void main() {
         for (var i = 0; i < 4; i++) {
           final destination = destinations.at(i);
           final rect = tester.getRect(destination);
-          expect(rect.width, closeTo(80, .1));
+          expect(rect.width, closeTo(tester.getSize(bar).width / 4, .1));
           expect(rect.height, greaterThanOrEqualTo(48));
           final text = find.descendant(
             of: destination,
@@ -1020,4 +1140,512 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('to-do lists show members to act on, each with a next step', (
+    tester,
+  ) async {
+    await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      overviewRows: [
+        FakeMemberOverviewRepository.row(
+          gymId: gymA,
+          daysLeft: 3,
+          expiringSoon: true,
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('Today’s to-do'));
+    // The fake returns the same row for every list; each section renders it.
+    await reveal(tester, find.textContaining('Expiring in 7 days'));
+    expect(find.text('Monthly · 3 days left'), findsWidgets);
+    expect(find.text('See all'), findsWidgets);
+    expect(find.widgetWithText(OutlinedButton, 'Renew'), findsWidgets);
+    expect(find.byTooltip('WhatsApp Alex'), findsWidgets);
+  });
+
+  testWidgets('empty to-do lists say there is nothing to chase', (
+    tester,
+  ) async {
+    await pumpAdmin(tester, FakeDashboardRepository());
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('No memberships end this week.'));
+    expect(find.text('Nobody owes money right now.'), findsOneWidget);
+    expect(find.text('Every expired member has renewed.'), findsOneWidget);
+  });
+
+  testWidgets('gym settings validate GSTIN and save only changed values', (
+    tester,
+  ) async {
+    final settings = FakeGymSettingsRepository(
+      settings: const GymSettings(timezone: null, timezoneConfigured: false),
+    );
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      settings: settings,
+    );
+    await tester.pumpAndSettle();
+    scope.read(appRouterProvider).push(AppRoutes.gymSettings);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Not set yet'), findsOneWidget);
+    // The page's vertical scroller (text fields have horizontal ones).
+    final list = find
+        .descendant(
+          of: find.byType(GymSettingsPage),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Scrollable &&
+                widget.axisDirection == AxisDirection.down,
+          ),
+        )
+        .first;
+    Future<void> bottom() async {
+      // A focused field keeps itself on screen; release it first.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      final position = tester.state<ScrollableState>(list).position;
+      position.jumpTo(position.maxScrollExtent);
+      await tester.pumpAndSettle();
+    }
+
+    await tester.enterText(find.byKey(const ValueKey('gstin')), '1234');
+    await bottom();
+    await tester.tap(find.text('Save settings'));
+    await tester.pumpAndSettle();
+    expect(settings.updates, isEmpty);
+    // Jump to the top, where the timezone error is, then scroll to the GST one.
+    tester.state<ScrollableState>(list).position.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(find.text('Choose your gym’s timezone'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Enter a 15-character GST number'),
+      200,
+      scrollable: list,
+    );
+    await tester.ensureVisible(find.byKey(const ValueKey('timezone')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('timezone')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('India (IST) · Asia/Kolkata').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('gstin')),
+      '27aapfu0939f1zv',
+    );
+    await bottom();
+    await tester.tap(find.text('Save settings'));
+    await tester.pumpAndSettle();
+    expect(settings.updates.single, {
+      'timezone': 'Asia/Kolkata',
+      'gstin': '27AAPFU0939F1ZV',
+      'upiId': null,
+      'upiPayeeName': null,
+      'address': null,
+    });
+    expect(find.text('Gym settings saved'), findsOneWidget);
+  });
+  testWidgets(
+    'check-in: search, refused expired member, override, today count',
+    (tester) async {
+      final visits = FakeVisitRepository()..expired.add(memberId);
+      final scope = await pumpAdmin(
+        tester,
+        FakeDashboardRepository(),
+        visits: visits,
+        overviewRows: [
+          FakeMemberOverviewRepository.row(gymId: gymA, state: 'expired'),
+        ],
+      );
+      await tester.pumpAndSettle();
+      final quick = find.descendant(
+        of: find.byType(DashboardQuickActions),
+        matching: find.text('Check in'),
+      );
+      await reveal(tester, quick);
+      await tester.tap(quick);
+      await tester.pumpAndSettle();
+      expect(scope.read(appRouterProvider).state.uri.path, AppRoutes.checkIn);
+      expect(find.text('Scan member QR'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Alex');
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Check in Alex River'));
+      await tester.pumpAndSettle();
+      expect(find.text('Membership not active'), findsOneWidget);
+      expect(
+        find.text(
+          'The Monthly membership has expired. Renew it, or check in anyway.',
+        ),
+        findsOneWidget,
+      );
+      expect(visits.calls.single.override, isFalse);
+      await tester.tap(find.text('Check in anyway'));
+      await tester.pumpAndSettle();
+      expect(visits.calls.last.override, isTrue);
+      expect(find.textContaining('Checked in with override'), findsOneWidget);
+      expect(find.text('Today · 1'), findsOneWidget);
+    },
+  );
+
+  testWidgets('cancelling the override prompt records nothing', (tester) async {
+    final visits = FakeVisitRepository()..expired.add(memberId);
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      visits: visits,
+      overviewRows: [
+        FakeMemberOverviewRepository.row(gymId: gymA, state: 'expired'),
+      ],
+    );
+    await tester.pumpAndSettle();
+    scope.read(appRouterProvider).push(AppRoutes.checkIn);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Alex');
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Check in Alex River'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("Don't check in"));
+    await tester.pumpAndSettle();
+    expect(visits.calls, hasLength(1));
+    expect(visits.calls.single.override, isFalse);
+    expect(find.textContaining('Checked in'), findsNothing);
+  });
+  testWidgets('expenses: add rent, see the month total, remove it', (
+    tester,
+  ) async {
+    final expenses = FakeExpenseRepository();
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      expenses: expenses,
+    );
+    await tester.pumpAndSettle();
+    scope.read(appRouterProvider).push(AppRoutes.expenses);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No expenses recorded'), findsOneWidget);
+    await tester.tap(find.text('Add expense'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save expense'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save expense'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter an amount like 2500 or 2500.50'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('expense-amount')),
+      '25000',
+    );
+    await tester.ensureVisible(find.text('Save expense'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save expense'));
+    await tester.pumpAndSettle();
+    expect(expenses.items.single['category'], 'rent');
+    expect(expenses.items.single['amountPaise'], 2500000);
+    expect(find.text('₹25,000'), findsWidgets);
+    await tester.tap(find.byTooltip('Remove expense'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('rent expense?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove expense'));
+    await tester.pumpAndSettle();
+    expect(expenses.removed, ['e1']);
+    expect(find.textContaining('No expenses recorded'), findsOneWidget);
+  });
+
+  testWidgets('a negative profit is shown as a loss, never a crash', (
+    tester,
+  ) async {
+    final repository = FakeDashboardRepository()
+      ..result = GymDashboard.fromJson({
+        ...dashboardJson(revenue: 100000),
+        'expenses': {'periodAmountPaise': 300000, 'profitPaise': -200000},
+      });
+    await pumpAdmin(tester, repository);
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('Loss'));
+    expect(find.text('₹2,000.00'), findsOneWidget);
+    // Compact cards carry the caption in their accessible label.
+    final semantics = tester.ensureSemantics();
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Loss: ₹2,000\.00\..*Spent ₹3,000')),
+      findsOneWidget,
+    );
+    semantics.dispose();
+    expect(tester.takeException(), isNull);
+  });
+  Future<void> openAdjustments(
+    WidgetTester tester,
+    ProviderContainer scope,
+  ) async {
+    final gym = scope.read(adminGymProvider)!;
+    Navigator.of(
+      tester.element(find.byType(Scaffold).first),
+      rootNavigator: true,
+    ).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          body: SingleChildScrollView(
+            child: MembershipAdjustmentsCard(
+              scope: (userId: gym.userId, gymId: gym.gymId, memberId: memberId),
+              subscriptionId: 'subscription-1',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('freeze: preview shows the return day and new end, then saves', (
+    tester,
+  ) async {
+    final adjustments = FakeAdjustmentRepository();
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      adjustments: adjustments,
+    );
+    await tester.pumpAndSettle();
+    await openAdjustments(tester, scope);
+    expect(find.text('Frozen 0 of 30 days · Ends 29 Jan 2027'), findsOneWidget);
+    await tester.tap(find.text('Freeze membership'));
+    await tester.pumpAndSettle();
+    expect(find.text('7 days'), findsOneWidget);
+    expect(
+      find.text('Back on 21 Nov 2026. Membership now ends 5 Feb 2027.'),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Freeze for 7 days'));
+    await tester.tap(find.text('Freeze for 7 days'));
+    await tester.pumpAndSettle();
+    expect(adjustments.calls, ['freeze:2026-11-14:7']);
+    expect(find.text('End early'), findsOneWidget);
+  });
+
+  testWidgets('freeze is explained, not offered, when the plan is too short', (
+    tester,
+  ) async {
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      adjustments: FakeAdjustmentRepository(
+        json: adjustmentsJson(durationDays: 30, blocker: 'plan_too_short'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openAdjustments(tester, scope);
+    expect(find.text('Freeze membership'), findsNothing);
+    expect(
+      find.text('Only plans of 90 days or more can be frozen.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'discount: percent previews rupees; more than unpaid is refused',
+    (tester) async {
+      final adjustments = FakeAdjustmentRepository(
+        json: adjustmentsJson(paidPaise: 300000),
+      );
+      final scope = await pumpAdmin(
+        tester,
+        FakeDashboardRepository(),
+        adjustments: adjustments,
+      );
+      await tester.pumpAndSettle();
+      await openAdjustments(tester, scope);
+      await tester.tap(find.text('Give discount'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('discount-value')),
+        '1500',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('That is more than the unpaid ₹1,000.'), findsOneWidget);
+      await tester.tap(find.text('Percent %'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('discount-value')),
+        '10',
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('₹400 off · Still due ₹600'), findsOneWidget);
+      await tester.ensureVisible(find.text('Give ₹400 discount'));
+      await tester.tap(find.text('Give ₹400 discount'));
+      await tester.pumpAndSettle();
+      expect(adjustments.calls, ['discount:10.0%']);
+    },
+  );
+  testWidgets('dashboard lists enquiry follow-ups and birthdays this week', (
+    tester,
+  ) async {
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      leads: FakeLeadRepository(),
+      birthdays: [
+        UpcomingBirthday.fromJson({
+          'member': {
+            'id': memberId,
+            'memberCode': 'ME01',
+            'firstName': 'Priya',
+            'lastName': 'Verma',
+            'phone': '9876543202',
+            'status': 'active',
+          },
+          'daysUntil': 2,
+          'turning': 28,
+        }),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('Enquiry follow-ups · 1'));
+    expect(find.text('Kabir Malhotra'), findsOneWidget);
+    await reveal(tester, find.text('Birthdays this week'));
+    expect(find.text('In 2 days · turns 28'), findsOneWidget);
+    expect(find.byTooltip('Wish Priya on WhatsApp'), findsOneWidget);
+    await reveal(tester, find.text('Enquiry follow-ups · 1'));
+    await tester.tap(find.text('Enquiry follow-ups · 1'));
+    await tester.pumpAndSettle();
+    expect(scope.read(appRouterProvider).state.uri.path, AppRoutes.leads);
+  });
+
+  testWidgets('add enquiry validates, saves and opens it', (tester) async {
+    final leads = FakeLeadRepository(leads: []);
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      leads: leads,
+    );
+    await tester.pumpAndSettle();
+    scope.read(appRouterProvider).push(AppRoutes.leads);
+    await tester.pumpAndSettle();
+    expect(find.text('No follow-ups due. Nice work.'), findsOneWidget);
+    await tester.tap(find.text('Add enquiry'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save enquiry'));
+    await tester.tap(find.text('Save enquiry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Required'), findsOneWidget);
+    expect(find.text('Enter a phone number'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('lead-first')), 'Meera');
+    await tester.enterText(
+      find.byKey(const ValueKey('lead-phone')),
+      '90000 10002',
+    );
+    await tester.ensureVisible(find.text('Save enquiry'));
+    await tester.tap(find.text('Save enquiry'));
+    await tester.pumpAndSettle();
+    expect(leads.calls, ['create:Meera:90000 10002:walk_in']);
+    expect(
+      scope.read(appRouterProvider).state.uri.path,
+      startsWith('${AppRoutes.leads}/'),
+    );
+    expect(find.text('Convert to member'), findsOneWidget);
+  });
+
+  testWidgets(
+    'enquiry: start trial, lost needs a reason, convert prefills Add member',
+    (tester) async {
+      final leads = FakeLeadRepository();
+      final scope = await pumpAdmin(
+        tester,
+        FakeDashboardRepository(),
+        leads: leads,
+        onboarding: true,
+      );
+      await tester.pumpAndSettle();
+      scope.read(appRouterProvider).push('${AppRoutes.leads}/$leadA');
+      await tester.pumpAndSettle();
+      expect(find.text('Kabir Malhotra'), findsOneWidget);
+      await tester.tap(find.text('Start 3-day trial'));
+      await tester.pumpAndSettle();
+      expect(leads.calls, ['trial']);
+      expect(find.text('Start 3-day trial'), findsNothing);
+      await tester.tap(find.text('Mark lost'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Mark lost'));
+      await tester.pumpAndSettle();
+      expect(leads.calls, ['trial'], reason: 'no reason, nothing saved');
+      await tester.tap(find.text('Convert to member'));
+      await tester.pumpAndSettle();
+      expect(
+        scope.read(appRouterProvider).state.uri.path,
+        '${AppRoutes.members}/new',
+      );
+      expect(
+        scope.read(appRouterProvider).state.uri.queryParameters.keys,
+        ['gymId'],
+        reason: 'name and phone are never put in the URL',
+      );
+      String field(String key) => tester
+          .widget<EditableText>(
+            find.descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .controller
+          .text;
+      expect(field('firstName'), 'Kabir');
+      expect(field('lastName'), 'Malhotra');
+      expect(field('phone'), '90000 10001');
+    },
+  );
+  testWidgets('mark lost saves the reason and offers to reopen', (
+    tester,
+  ) async {
+    final leads = FakeLeadRepository();
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      leads: leads,
+    );
+    await tester.pumpAndSettle();
+    scope.read(appRouterProvider).push('${AppRoutes.leads}/$leadA');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Mark lost'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark lost'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('lost-reason')),
+      'Too far',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Mark lost'));
+    await tester.pumpAndSettle();
+    expect(leads.calls, ['update:{status: lost, lostReason: Too far}']);
+    expect(find.text('Reopen'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('adding a phone that already has an open enquiry opens it', (
+    tester,
+  ) async {
+    final leads = FakeLeadRepository()..duplicateOf = leadA;
+    final scope = await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      leads: leads,
+    );
+    await tester.pumpAndSettle();
+    scope.read(appRouterProvider).push(AppRoutes.leads);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add enquiry'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('lead-first')), 'Kabir');
+    await tester.enterText(
+      find.byKey(const ValueKey('lead-phone')),
+      '90000 10001',
+    );
+    await tester.ensureVisible(find.text('Save enquiry'));
+    await tester.tap(find.text('Save enquiry'));
+    await tester.pumpAndSettle();
+    expect(
+      scope.read(appRouterProvider).state.uri.path,
+      '${AppRoutes.leads}/$leadA',
+    );
+    expect(
+      find.text('Already an open enquiry for this number. Opening it.'),
+      findsOneWidget,
+    );
+  });
 }

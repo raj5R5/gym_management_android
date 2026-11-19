@@ -219,7 +219,7 @@ class DioPaymentRepository implements PaymentRepository {
         final meta = object(body['meta']);
         final period = DashboardPeriod.fromJson(object(meta['period']));
         final pagination = Pagination.fromJson(object(meta['pagination']));
-        if (period.branchId != null ||
+        if (period.legacyBranchId != null ||
             period.from.toString() != range.from.toString() ||
             period.to.toString() != range.to.toString() ||
             pagination.page != page ||

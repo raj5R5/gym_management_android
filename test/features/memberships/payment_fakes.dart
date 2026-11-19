@@ -77,6 +77,7 @@ class DueMembersFake extends FakeMemberRepository {
   ) async {
     operations.add('memberships:$gymId:$id:$page');
     if (failure != null) throw failure!;
+    if (historyGate != null) return historyGate!.future;
     final all = debts[id] ?? [];
     return MembershipHistory.fromResponse(
       {

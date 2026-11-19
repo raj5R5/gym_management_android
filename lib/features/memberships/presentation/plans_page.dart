@@ -1,14 +1,16 @@
+import '../../../shared/widgets/icon_label.dart';
+import '../../../shared/widgets/field_icon.dart';
 import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
-import '../../../shared/formatting/inr.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../models/billing_models.dart';
 import '../data/billing_failure.dart';
 import '../providers/plan_providers.dart';
 import 'billing_components.dart';
+import 'plan_summary_card.dart';
 
 String planPath(String gymId, {String? planId}) =>
     '${AppRoutes.plans}/${planId ?? 'new'}?gymId=${Uri.encodeQueryComponent(gymId)}';
@@ -99,27 +101,16 @@ class _PlansPageState extends ConsumerState<PlansPage> {
           else if (plans.asData?.value
               case final BillingPage<MembershipPlan> data) ...[
             if (data.items.isEmpty)
-              const Text('No membership plans. Create your first plan.'),
+              const IconLabel(
+                'No membership plans. Create your first plan.',
+                icon: Icons.layers_outlined,
+              ),
             ...data.items.map(
-              (plan) => ProfileSection(
-                title: plan.name,
-                icon: Icons.card_membership_outlined,
-                children: [
-                  Text(
-                    formatInrPaise(plan.pricePaise),
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  if (plan.description != null) Text(plan.description!),
-                  Text(
-                    '${plan.durationDays} days · ${plan.status == 'active' ? 'Active' : 'Inactive'}',
-                  ),
-                  OutlinedButton(
-                    onPressed: () =>
-                        context.push(planPath(gym.gymId, planId: plan.id)),
-                    child: const Text('Edit plan'),
-                  ),
-                ],
+              (plan) => PlanSummaryCard(
+                plan: plan,
+                baseline: comparisonBaseline(data.items),
+                onEdit: () =>
+                    context.push(planPath(gym.gymId, planId: plan.id)),
               ),
             ),
             PageControls(
@@ -284,7 +275,10 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                   controller: _name,
                   enabled: !busy && !blocked,
                   maxLength: 120,
-                  decoration: const InputDecoration(labelText: 'Name'),
+                  decoration: const InputDecoration(
+                    prefixIcon: FieldIcon('name'),
+                    labelText: 'Name',
+                  ),
                   validator: (value) => value == null || value.trim().isEmpty
                       ? 'Enter a plan name.'
                       : value.trim().length > 120
@@ -299,6 +293,7 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                   minLines: 2,
                   maxLines: 4,
                   decoration: const InputDecoration(
+                    prefixIcon: FieldIcon('description'),
                     labelText: 'Description (optional)',
                   ),
                   validator: (value) => (value?.trim().length ?? 0) > 2000
@@ -311,6 +306,7 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                   enabled: !busy && !blocked,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
+                    prefixIcon: FieldIcon('duration'),
                     labelText: 'Duration in days',
                   ),
                   validator: (value) {
@@ -329,6 +325,7 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                     decimal: true,
                   ),
                   decoration: const InputDecoration(
+                    prefixIcon: FieldIcon('price'),
                     labelText: 'Price in INR',
                     prefixText: '₹ ',
                     helperText: 'Zero is allowed for a free plan.',
@@ -344,9 +341,14 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  itemHeight: null,
                   key: const ValueKey('planStatus'),
                   initialValue: _status,
-                  decoration: const InputDecoration(labelText: 'Status'),
+                  decoration: const InputDecoration(
+                    prefixIcon: FieldIcon('status'),
+                    labelText: 'Status',
+                  ),
                   items: ['active', 'inactive']
                       .map(
                         (value) =>

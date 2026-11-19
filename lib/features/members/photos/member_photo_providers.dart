@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../providers/member_overview_providers.dart';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -257,6 +258,7 @@ class MemberPhotoController extends AsyncNotifier<MemberPhotoEditState> {
   }, success: 'Photo removed.');
   void _refresh(MemberPhotoReceipt receipt) {
     ref.read(memberPhotoReceiptsProvider.notifier).save(target, receipt);
+    if (target.isOwner) return;
     final scope = (
       userId: target.scope.userId,
       gymId: target.scope.gymId,
@@ -265,6 +267,7 @@ class MemberPhotoController extends AsyncNotifier<MemberPhotoEditState> {
     // Do not invalidate the editable profile: rebuilding its loading page would
     // discard unsaved text fields. Photo receipts update the avatar immediately.
     ref.invalidate(membersProvider);
+    ref.invalidate(memberOverviewProvider);
     ref.invalidate(memberSummaryProvider(scope));
     ref.invalidate(outstandingDuesProvider);
   }

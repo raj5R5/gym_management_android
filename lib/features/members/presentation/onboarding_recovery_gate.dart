@@ -1,3 +1,5 @@
+import '../../../shared/widgets/icon_label.dart';
+import '../providers/member_overview_providers.dart';
 import '../photos/member_photo_widgets.dart';
 import '../photos/member_photo_providers.dart';
 import '../photos/member_photo_models.dart';
@@ -31,8 +33,12 @@ class OnboardingRecoveryGate extends ConsumerStatefulWidget {
     required this.scope,
     required this.service,
     required this.freshDraft,
+    this.onRegistered,
   });
   final OnboardingScope scope;
+
+  /// Called once with the new member's id when registration is confirmed.
+  final ValueChanged<String>? onRegistered;
   final MemberOnboardingService service;
   final Widget Function(
     ValueChanged<OnboardingWizardState> confirm,
@@ -46,6 +52,7 @@ class OnboardingRecoveryGate extends ConsumerStatefulWidget {
 }
 
 class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
+  bool _registeredReported = false;
   bool _busy = true;
   bool _restored = false;
   bool _verified = false;
@@ -412,8 +419,13 @@ class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
             ? 'Latest action succeeded. Registration is confirmed and safely saved.'
             : 'Latest action completed. The saved state was verified.';
       });
-      if (actual?.result != null) {
+      if (actual?.result case final result?) {
+        if (!_registeredReported) {
+          _registeredReported = true;
+          widget.onRegistered?.call(result.member.id);
+        }
         ref.invalidate(membersProvider);
+        ref.invalidate(memberOverviewProvider);
         ref.invalidate(dashboardProvider);
       }
     } catch (error) {
@@ -541,31 +553,55 @@ class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
                         Text(
                           '${result.member.firstName} ${result.member.lastName}',
                         ),
-                        Text('Member code: ${result.member.memberCode}'),
+                        IconLabel(
+                          'Member code: ${result.member.memberCode}',
+                          icon: Icons.badge_outlined,
+                        ),
                         Text('Member status: ${result.member.status}'),
                         const SizedBox(height: AppSpacing.lg),
                         if (result.subscription case final subscription?) ...[
-                          Text('Plan: ${subscription.planName}'),
-                          Text('Membership status: ${subscription.status}'),
-                          Text('Start date: ${subscription.startDate}'),
-                          Text('End date: ${subscription.endDate} (exclusive)'),
+                          IconLabel(
+                            'Plan: ${subscription.planName}',
+                            icon: Icons.card_membership_outlined,
+                          ),
+                          IconLabel(
+                            'Membership status: ${subscription.status}',
+                            icon: Icons.card_membership_outlined,
+                          ),
+                          IconLabel(
+                            'Start date: ${subscription.startDate}',
+                            icon: Icons.event_available_outlined,
+                          ),
+                          IconLabel(
+                            'End date: ${subscription.endDate} (exclusive)',
+                            icon: Icons.event_busy_outlined,
+                          ),
                         ] else
                           const Text(
                             'Member registration only · No membership',
                           ),
-                        Text(
+                        IconLabel(
                           'Plan price: ${formatInrPaise(result.billing.planPricePaise)}',
+                          icon: Icons.sell_outlined,
                         ),
-                        Text(
+                        IconLabel(
                           'Amount received: ${formatInrPaise(result.billing.amountReceivedPaise)}',
+                          icon: Icons.payments_outlined,
                         ),
-                        Text(
+                        IconLabel(
                           'Outstanding balance: ${formatInrPaise(result.billing.outstandingBalancePaise)}',
+                          icon: Icons.account_balance_wallet_outlined,
                         ),
                         if (result.payment case final payment?) ...[
-                          Text('Payment method: ${payment.method.label}'),
+                          IconLabel(
+                            'Payment method: ${payment.method.label}',
+                            icon: Icons.account_balance_wallet_outlined,
+                          ),
                           if (payment.reference != null)
-                            Text('Reference: ${payment.reference}'),
+                            IconLabel(
+                              'Reference: ${payment.reference}',
+                              icon: Icons.receipt_long_outlined,
+                            ),
                         ] else
                           const Text('No initial payment was recorded.'),
                         const SizedBox(height: AppSpacing.lg),

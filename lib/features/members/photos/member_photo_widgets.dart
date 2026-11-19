@@ -6,6 +6,7 @@ import '../models/member_models.dart';
 import '../models/pending_onboarding.dart';
 import 'member_photo_models.dart';
 import 'member_photo_providers.dart';
+import '../../../shared/widgets/confirm_dialog.dart';
 
 String? effectivePhotoUrl(
   WidgetRef ref,
@@ -261,28 +262,25 @@ class MemberPhotoEditor extends ConsumerWidget {
     super.key,
     required this.target,
     this.member,
+    this.ownerPhotoUrl,
+    this.ownerPhotoRevision = 0,
     this.enabled = true,
   });
   final MemberPhotoTarget target;
   final MemberProfile? member;
+  final String? ownerPhotoUrl;
+  final int ownerPhotoRevision;
   final bool enabled;
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove profile photo?'),
-        content: const Text('The member will use their initials avatar.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove photo'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Remove profile photo?',
+      message: target.isOwner
+          ? 'Your profile will show your initials.'
+          : 'The member will show their initials.',
+      keepLabel: 'Keep photo',
+      confirmLabel: 'Remove photo',
+      destructive: true,
     );
     if (confirmed == true && context.mounted) {
       await ref.read(memberPhotoControllerProvider(target).notifier).remove();
@@ -301,7 +299,9 @@ class MemberPhotoEditor extends ConsumerWidget {
     );
     final currentUrl = member != null
         ? effectivePhotoUrl(ref, target, member!)
-        : receipt?.url;
+        : receipt != null && receipt.revision >= ownerPhotoRevision
+        ? receipt.url
+        : ownerPhotoUrl;
     final currentBytes = member == null && currentUrl != null
         ? ref
               .watch(
@@ -315,7 +315,9 @@ class MemberPhotoEditor extends ConsumerWidget {
     return ProfileSection(
       title: 'Profile photo',
       icon: Icons.add_a_photo_outlined,
-      subtitle: target.memberId == null
+      subtitle: target.isOwner
+          ? 'Optional · Photo saves separately from profile details'
+          : target.memberId == null
           ? 'Optional · Uploads after registration is confirmed'
           : 'Optional · Photo saves separately from member details',
       children: [
@@ -384,7 +386,9 @@ class MemberPhotoEditor extends ConsumerWidget {
                                 ? 'Saved photo · Outcome needs verification'
                                 : 'Selected photo · Preview'
                           : hasPhoto
-                          ? 'Current member photo'
+                          ? target.isOwner
+                                ? 'Current profile photo'
+                                : 'Current member photo'
                           : 'Initials avatar',
                     ),
                     const SizedBox(height: 4),
@@ -392,7 +396,7 @@ class MemberPhotoEditor extends ConsumerWidget {
                       'JPEG, PNG or WebP · Up to 5 MB',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if (target.memberId == null) ...[
+                    if (!target.canUpload) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Your selection is saved on this device. You can finish the upload later if needed.',
@@ -408,7 +412,7 @@ class MemberPhotoEditor extends ConsumerWidget {
           if (busy) ...[
             LinearProgressIndicator(
               value: state?.progress == 1 ? null : state?.progress,
-              semanticsLabel: 'Saving member photo',
+              semanticsLabel: 'Saving profile photo',
             ),
             const SizedBox(height: 8),
             Text(
@@ -457,7 +461,7 @@ class MemberPhotoEditor extends ConsumerWidget {
                   onPressed: enabled && !busy ? controller.cancel : null,
                   child: const Text('Cancel selection'),
                 ),
-              if (pending != null && target.memberId != null)
+              if (pending != null && target.canUpload)
                 FilledButton.icon(
                   onPressed: enabled && !busy ? controller.upload : null,
                   icon: Icon(

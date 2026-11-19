@@ -98,7 +98,10 @@ void main() {
       container.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: container,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -489,7 +492,7 @@ void main() {
           await reveal(tester, find.text('₹500 due'));
           expect(find.text('₹500 due'), findsOneWidget);
           expect(find.textContaining('9876543299'), findsNothing);
-          expect(find.textContaining('Member code:'), findsNothing);
+          expect(find.text('Member code: ME01'), findsOneWidget);
           expect(members.profiles.single.status, MemberStatus.inactive);
         }
       },
@@ -591,7 +594,7 @@ void main() {
     },
   );
   testWidgets(
-    'Members keeps the dues card width and photo height with compact single-line dates',
+    'Members and dues share photo sizes with naturally sized identity and dues footers',
     (tester) async {
       tester.view.physicalSize = const Size(360, 1000);
       tester.view.devicePixelRatio = 1;
@@ -610,6 +613,9 @@ void main() {
       final duesPhoto = tester.getSize(
         find.descendant(of: duesCard, matching: find.byType(MemberPhotoAvatar)),
       );
+      expect(duesPhoto.height, 168);
+      expect(find.text('Total across 1 unpaid membership'), findsOneWidget);
+      expect(find.text('Current membership dates'), findsOneWidget);
       container.read(appRouterProvider).go(AppRoutes.members);
       await tester.pumpAndSettle();
       await reveal(tester, find.text('Alex River'));
@@ -619,7 +625,9 @@ void main() {
       );
 
       expect(tester.getSize(memberCard).width, duesSize.width);
-      expect(tester.getSize(memberCard).height, lessThan(duesSize.height));
+      expect(tester.getSize(memberCard).height, greaterThan(duesPhoto.height));
+      expect(duesSize.height, greaterThan(duesPhoto.height));
+      expect(find.text('Member code: ME01'), findsOneWidget);
       expect(
         tester.getSize(
           find.descendant(
@@ -633,7 +641,8 @@ void main() {
       expect(find.byTooltip('Active membership'), findsOneWidget);
       expect(find.text('Payment due'), findsNothing);
       expect(find.text('₹500.00 due'), findsOneWidget);
-      expect(find.text('1 Mar 2026 – 31 Mar 2026'), findsOneWidget);
+      expect(find.text('1 Mar 2026 –'), findsOneWidget);
+      expect(find.text('31 Mar 2026'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -655,7 +664,7 @@ void main() {
       expect(find.text('AR'), findsOneWidget);
       expect(find.text('₹500 due'), findsOneWidget);
       expect(find.byType(MemberStatusBadge), findsNothing);
-      expect(find.textContaining('Member code:'), findsNothing);
+      expect(find.text('Member code: ME01'), findsOneWidget);
       expect(find.textContaining('9876543210'), findsNothing);
       expect(find.textContaining('Amount paid:'), findsNothing);
       expect(find.text('Record Payment'), findsNothing);
@@ -867,7 +876,7 @@ void main() {
         final photoBounds = tester.getRect(photo);
         final cardBounds = tester.getRect(card);
         expect(photoBounds.width, cardBounds.width);
-        expect(photoBounds.height, greaterThan(cardBounds.height * .5));
+        expect(photoBounds.height, 168);
         expect(
           tester
               .widget<Image>(
@@ -925,7 +934,7 @@ void main() {
     );
   }
   testWidgets(
-    'dues chooses current saved dates without merging previous periods',
+    'dues labels the total across memberships separately from current saved dates',
     (tester) async {
       await mount(tester);
       members.debts[memberId] = [
@@ -936,12 +945,15 @@ void main() {
       ];
       await tapCard(tester, 'Pending Amount');
       expect(find.text('₹1,200 due'), findsOneWidget);
+      expect(find.text('Total across 2 unpaid memberships'), findsOneWidget);
       expect(
         tester
             .widget<MembershipDateRange>(find.byType(MembershipDateRange))
             .label,
         '12 Oct 2026 – 12 Dec 2026',
       );
+      expect(find.text('Current membership dates'), findsOneWidget);
+      expect(find.text('Member code: ME01'), findsOneWidget);
       expect(find.text('Expired'), findsNothing);
       expect(find.text('Record Payment'), findsNothing);
     },
@@ -958,12 +970,14 @@ void main() {
       ];
       await tapCard(tester, 'Pending Amount');
       expect(find.text('₹1,200 due'), findsOneWidget);
+      expect(find.text('Total across 2 unpaid memberships'), findsOneWidget);
       expect(
         tester
             .widget<MembershipDateRange>(find.byType(MembershipDateRange))
             .label,
         '1 Sep 2026 – 1 Oct 2026',
       );
+      expect(find.text('Latest expired membership dates'), findsOneWidget);
       expect(
         tester
             .widget<Card>(
@@ -1096,6 +1110,163 @@ void main() {
       );
     },
   );
+  Future<void> openSelector(WidgetTester tester) async {
+    await mount(tester);
+    members.debts[memberId]!.add(debtJson(id: gymB, status: 'expired'));
+    await showMemberDetails(tester);
+    await reveal(tester, find.text('Pay Now'));
+    await tester.tap(find.text('Pay Now'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose membership to pay'), findsOneWidget);
+  }
+
+  Finder selectorContent(Finder target) =>
+      find.descendant(of: find.byType(BottomSheet), matching: target);
+
+  testWidgets('selector retains header and close while balances reload', (
+    tester,
+  ) async {
+    await openSelector(tester);
+    final scope = scopeFor(container.read(adminGymProvider)!, memberId);
+    final gate = Completer<MembershipHistory>();
+    members.historyGate = gate;
+    container.invalidate(memberMembershipsProvider(scope));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Choose membership to pay'), findsOneWidget);
+    expect(
+      find.byTooltip('Close membership selection').hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.text('Checking outstanding memberships…'), findsOneWidget);
+    expect(
+      selectorContent(find.byType(LinearProgressIndicator)),
+      findsOneWidget,
+    );
+    expect(selectorContent(find.byType(ListTile)), findsNothing);
+    expect(find.byType(RecordPaymentSheet), findsNothing);
+    expect(payments.collections, isEmpty);
+    members.historyGate = null;
+    gate.complete(await members.memberships(gymA, memberId, 1));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('pay-membership-$gymB')), findsOneWidget);
+    await tester.tap(find.byTooltip('Close membership selection'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsNothing);
+  });
+
+  for (final invalidBalance in [false, true]) {
+    testWidgets(
+      'selector error retains close and retries existing balance reads, invalidBalance=$invalidBalance',
+      (tester) async {
+        await openSelector(tester);
+        final scope = scopeFor(container.read(adminGymProvider)!, memberId);
+        if (invalidBalance) {
+          members.debts[memberId]!.first.remove('paymentSummary');
+        } else {
+          members.failure = const BillingFailure(
+            'Membership lookup is temporarily unavailable.',
+          );
+        }
+        container.invalidate(memberMembershipsProvider(scope));
+        await tester.pumpAndSettle();
+        expect(find.text('Choose membership to pay'), findsOneWidget);
+        expect(
+          find.byTooltip('Close membership selection').hitTestable(),
+          findsOneWidget,
+        );
+        expect(selectorContent(find.byType(BillingError)), findsOneWidget);
+        expect(selectorContent(find.byType(ListTile)), findsNothing);
+        expect(find.byType(RecordPaymentSheet), findsNothing);
+        final before = members.operations
+            .where((entry) => entry.startsWith('memberships:'))
+            .length;
+        members.failure = null;
+        members.debts[memberId]![0] = debtJson();
+        final retry = selectorContent(find.text('Retry'));
+        await tester.tap(retry);
+        await tester.pumpAndSettle();
+        expect(
+          members.operations
+              .where((entry) => entry.startsWith('memberships:'))
+              .length,
+          greaterThan(before),
+        );
+        expect(selectorContent(find.byType(BillingError)), findsNothing);
+        expect(find.byKey(ValueKey('pay-membership-$gymB')), findsOneWidget);
+        expect(payments.collections, isEmpty);
+      },
+    );
+  }
+
+  testWidgets(
+    'selector explicitly shows no outstanding memberships after balances settle',
+    (tester) async {
+      await openSelector(tester);
+      final scope = scopeFor(container.read(adminGymProvider)!, memberId);
+      members.debts[memberId] = [
+        debtJson(balance: 0),
+        debtJson(id: gymB, status: 'expired', balance: 0),
+      ];
+      container.invalidate(memberMembershipsProvider(scope));
+      await tester.pumpAndSettle();
+      expect(find.text('No outstanding memberships remain.'), findsOneWidget);
+      expect(find.text('Choose membership to pay'), findsOneWidget);
+      expect(selectorContent(find.byType(ListTile)), findsNothing);
+      expect(find.byType(RecordPaymentSheet), findsNothing);
+      expect(payments.collections, isEmpty);
+      await tester.tap(find.byTooltip('Close membership selection'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('Pay Now'), findsNothing);
+    },
+  );
+
+  for (final status in ['upcoming', 'expired']) {
+    testWidgets(
+      'payment form uses $status lifecycle label without changing eligibility',
+      (tester) async {
+        await mount(tester);
+        members.debts[memberId] = [
+          debtJson(status: status == 'upcoming' ? 'active' : 'expired')
+            ..addAll({
+              'isCurrentlyActive': false,
+              'startDate': status == 'upcoming' ? '2027-01-01' : '2025-01-01',
+              'endDate': status == 'upcoming' ? '2027-01-31' : '2025-01-31',
+            }),
+        ];
+        container
+            .read(appRouterProvider)
+            .go(
+              '${AppRoutes.members}/$memberId/membership/$subscriptionId?gymId=$gymA',
+            );
+        await tester.pumpAndSettle();
+        await reveal(tester, find.text('Record Payment'));
+        await tester.tap(find.text('Record Payment'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byType(RecordPaymentSheet),
+            matching: find.text(
+              status == 'upcoming'
+                  ? 'Membership: Upcoming'
+                  : 'Membership: Expired',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          tester
+              .widget<TextFormField>(find.byKey(const Key('collection-amount')))
+              .enabled,
+          isTrue,
+        );
+        expect(find.text('Membership: active'), findsNothing);
+        expect(payments.collections, isEmpty);
+      },
+    );
+  }
+
   for (final mode in ['paid', 'cancelled', 'unverified']) {
     testWidgets('Pay Now hidden for $mode balances and does not invent zero', (
       tester,
@@ -1117,7 +1288,13 @@ void main() {
           find.textContaining('Membership balances could not be verified'),
           findsOneWidget,
         );
-        expect(find.widgetWithText(TextButton, 'Retry'), findsWidgets);
+        expect(
+          find.ancestor(
+            of: find.text('Retry'),
+            matching: find.byWidgetPredicate((widget) => widget is TextButton),
+          ),
+          findsWidgets,
+        );
       }
     });
   }
@@ -1506,4 +1683,128 @@ void main() {
     expect(storage.values[recoveryScope.storageKey], isNull);
     expect(find.text('Review saved payment'), findsNothing);
   });
+  for (final dark in [false, true]) {
+    testWidgets(
+      'dues duplicate names retain distinct codes at 320dp and large text, dark=$dark',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 900);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        await mount(tester);
+        members.profiles.add(
+          MemberProfile.fromJson({
+            ...profileJson(),
+            'id': gymB,
+            'memberCode': 'ME02',
+          }),
+        );
+        members.debts[gymB] = [
+          debtJson(
+            id: '000000000000000000000024',
+            balance: 70000,
+            status: 'expired',
+          ),
+        ];
+        await tapCard(tester, 'Pending Amount');
+        for (final code in ['ME01', 'ME02']) {
+          await reveal(tester, find.text('Member code: $code'));
+          expect(find.text('Member code: $code').hitTestable(), findsOneWidget);
+          final semantics = find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                widget.properties.label?.contains('Member code: $code.') ==
+                    true,
+          );
+          expect(semantics, findsOneWidget);
+          expect(tester.takeException(), isNull);
+        }
+        await tester.tap(find.text('Member code: ME02'));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<MemberDetailsPage>(find.byType(MemberDetailsPage))
+              .memberId,
+          gymB,
+        );
+        expect(payments.collections, isEmpty);
+      },
+    );
+  }
+
+  testWidgets(
+    'dues shows upcoming saved dates with a singular membership count',
+    (tester) async {
+      await mount(tester);
+      members.debts[memberId] = [
+        debtJson()..addAll({
+          'isCurrentlyActive': false,
+          'startDate': '2027-01-01',
+          'endDate': '2027-01-31',
+        }),
+      ];
+      await tapCard(tester, 'Pending Amount');
+      expect(find.text('Total across 1 unpaid membership'), findsOneWidget);
+      expect(find.text('Upcoming membership dates'), findsOneWidget);
+      expect(find.text('Upcoming'), findsOneWidget);
+      expect(find.text('₹500 due'), findsOneWidget);
+      expect(payments.collections, isEmpty);
+    },
+  );
+  for (final dark in [false, true]) {
+    testWidgets(
+      'selector header and Close stay reachable with long plans at 320dp and double text, dark=$dark',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 800);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        tester.platformDispatcher.platformBrightnessTestValue = dark
+            ? Brightness.dark
+            : Brightness.light;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        await mount(tester);
+        members.debts[memberId] = [
+          debtJson()
+            ..['planNameSnapshot'] =
+                'Complete strength and conditioning with personal training',
+          debtJson(id: gymB, status: 'expired')
+            ..['planNameSnapshot'] =
+                'Previous strength and conditioning membership with weekend gym access',
+        ];
+        await showMemberDetails(tester);
+        await reveal(tester, find.text('Pay Now'));
+        await tester.tap(find.text('Pay Now'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(ValueKey('pay-membership-$gymB')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Choose membership to pay').hitTestable(),
+          findsOneWidget,
+        );
+        final close = find.byWidgetPredicate(
+          (widget) =>
+              widget is IconButton &&
+              widget.tooltip == 'Close membership selection',
+        );
+        expect(close.hitTestable(), findsOneWidget);
+        expect(tester.getSize(close).shortestSide, greaterThanOrEqualTo(48));
+        expect(tester.takeException(), isNull);
+        await tester.tap(close);
+        await tester.pumpAndSettle();
+        expect(find.byType(BottomSheet), findsNothing);
+        expect(payments.collections, isEmpty);
+      },
+    );
+  }
 }

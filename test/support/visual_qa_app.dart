@@ -15,7 +15,6 @@ import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_
 import 'package:gym_management_app/features/auth/models/session_state.dart';
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/auth/providers/session_controller.dart';
-import 'package:gym_management_app/features/attendance/providers/attendance_providers.dart';
 import 'package:gym_management_app/features/members/data/pending_onboarding_store.dart';
 import 'package:gym_management_app/features/members/models/member_models.dart';
 import 'package:gym_management_app/features/members/providers/member_providers.dart';
@@ -26,7 +25,6 @@ import 'package:gym_management_app/features/memberships/providers/payment_provid
 import 'package:gym_management_app/features/trainers/providers/trainer_providers.dart';
 import '../features/auth/auth_fakes.dart';
 import '../features/admin_dashboard/dashboard_fakes.dart';
-import '../features/attendance/attendance_fakes.dart';
 import '../features/members/member_fakes.dart';
 import '../features/members/onboarding_fakes.dart';
 import '../features/memberships/billing_fakes.dart';
@@ -135,9 +133,6 @@ void main() {
       ),
       paymentRepositoryProvider.overrideWithValue(payments),
       trainerRepositoryProvider.overrideWithValue(FakeTrainerRepository()),
-      attendanceRepositoryProvider.overrideWithValue(
-        FakeAttendanceRepository(),
-      ),
       memberOnboardingRepositoryProvider.overrideWithValue(
         FakeOnboardingRepository(),
       ),

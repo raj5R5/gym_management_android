@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
 import '../../../shared/widgets/soft_panel.dart';
+import '../../../shared/widgets/card_reveal.dart';
 
 /// A decorative reveal, deliberately without progress/percentage semantics.
 class MetricRing extends StatelessWidget {
@@ -42,6 +43,14 @@ class _RingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;
+    canvas.drawOval(
+      rect.shift(const Offset(0, 2)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..color = Colors.black.withValues(alpha: .12)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
     canvas.drawOval(rect, paint..color = track);
     if (reveal > 0) {
       paint.shader = SweepGradient(
@@ -60,6 +69,16 @@ class _RingPainter extends CustomPainter {
         false,
         paint..color = color,
       );
+      canvas.drawArc(
+        rect.deflate(2.5),
+        -math.pi / 2,
+        math.pi * 2 * reveal.clamp(0, 1),
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = Colors.white.withValues(alpha: .32),
+      );
     }
   }
 
@@ -72,7 +91,7 @@ class _RingPainter extends CustomPainter {
 }
 
 /// Layouts share one finite reveal/count animation and exact-paise formatting.
-enum MetricCardLayout { circular, revenueHero, compact }
+enum MetricCardLayout { circular, revenueHero, compact, balance }
 
 class CircularMetricCard extends StatefulWidget {
   const CircularMetricCard({
@@ -174,8 +193,16 @@ class _CircularMetricCardState extends State<CircularMetricCard>
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        Color.lerp(theme.colorScheme.surface, tint, strength)!,
-        Color.lerp(theme.colorScheme.surface, tint, strength / 4)!,
+        Color.lerp(
+          theme.colorScheme.surface,
+          tint,
+          strength,
+        )!.withValues(alpha: AppGlass.dashboard(theme.brightness)),
+        Color.lerp(
+          theme.colorScheme.surface,
+          tint,
+          strength / 4,
+        )!.withValues(alpha: AppGlass.dashboard(theme.brightness)),
       ],
     );
     final captionStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -203,11 +230,14 @@ class _CircularMetricCardState extends State<CircularMetricCard>
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, _) {
-            final visual = widget.layout == MetricCardLayout.revenueHero
-                ? _hero(context, formatted)
-                : _compact(context, formatted, cardGradient);
+            final visual = switch (widget.layout) {
+              MetricCardLayout.revenueHero => _hero(context, formatted),
+              MetricCardLayout.balance => _balance(context, formatted),
+              _ => _compact(context, formatted, cardGradient),
+            };
             if (widget.onTap == null ||
-                widget.layout == MetricCardLayout.compact) {
+                widget.layout == MetricCardLayout.compact ||
+                widget.layout == MetricCardLayout.balance) {
               return visual;
             }
             // Transparent Material above the opaque panel keeps ink visible over
@@ -221,7 +251,10 @@ class _CircularMetricCardState extends State<CircularMetricCard>
                     borderRadius: BorderRadius.circular(AppRadii.panel),
                     clipBehavior: Clip.antiAlias,
                     child: InkWell(
-                      onTap: widget.onTap,
+                      onTap: () {
+                        CardOrigin.mark(context);
+                        widget.onTap!();
+                      },
                       borderRadius: BorderRadius.circular(AppRadii.panel),
                       child: const SizedBox.expand(),
                     ),
@@ -405,6 +438,8 @@ class _CircularMetricCardState extends State<CircularMetricCard>
                 ? formatted
                 : '$_count',
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+              fontFamily: AppTypography.bodyFamily,
+              fontFeatures: const [FontFeature.tabularFigures()],
               fontSize: size,
               fontWeight: FontWeight.w700,
               letterSpacing: -.6,
@@ -425,11 +460,7 @@ class _CircularMetricCardState extends State<CircularMetricCard>
         inset: hero ? AppSpacing.lg : AppSpacing.sm,
         reveal: widget.value == null || widget.error != null ? 0 : _reveal,
         child: Center(
-          child: Icon(
-            widget.icon,
-            color: hero ? AppPalette.darkEmber : widget.color,
-            size: hero ? 28 : 18,
-          ),
+          child: Icon(widget.icon, color: color, size: hero ? 28 : 18),
         ),
       ),
     );
@@ -446,93 +477,127 @@ class _CircularMetricCardState extends State<CircularMetricCard>
 
   Widget _hero(BuildContext context, String? formatted) {
     final theme = Theme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadii.panel),
-        boxShadow: AppSurfaces.of(context).softShadow,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadii.panel),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color.lerp(AppPalette.hero, AppPalette.darkEmber, .13)!,
-                AppPalette.hero,
-              ],
-            ),
+    return SoftPanel(
+      glass: true,
+      glassOpacity: AppGlass.dashboard(theme.brightness),
+      padding: EdgeInsets.zero,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: theme.colorScheme.primary, width: 3),
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                right: -58,
-                top: -60,
-                child: ExcludeSemantics(
-                  child: Container(
-                    width: 220,
-                    height: 220,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          AppPalette.darkEmber.withValues(alpha: .09),
-                          AppPalette.darkEmber.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: ExcludeSemantics(
-                  child: Row(
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: ExcludeSemantics(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.title,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: AppPalette.heroInk,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              widget.periodLabel ?? 'Loading selected period…',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: AppPalette.heroMuted,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.sm),
-                            _value(
-                              context,
-                              formatted,
-                              size: 36,
-                              color: AppPalette.heroInk,
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              widget.error ?? widget.caption,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: AppPalette.darkEmber,
-                              ),
-                            ),
-                          ],
+                      Text(widget.title, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        widget.periodLabel ?? 'Loading selected period…',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.md),
-                      _ring(64, AppPalette.darkEmber, hero: true),
+                      const SizedBox(height: AppSpacing.sm),
+                      _value(
+                        context,
+                        formatted,
+                        size: 36,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        widget.error ?? widget.caption,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(width: AppSpacing.md),
+                _ring(64, theme.colorScheme.primary, hero: true),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _balance(BuildContext context, String? formatted) {
+    final theme = Theme.of(context);
+    final identity = Row(
+      children: [
+        _ring(40, widget.color),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.title, style: theme.textTheme.labelMedium),
+              const SizedBox(height: AppSpacing.xs),
+              _value(context, formatted, size: 26, color: widget.color),
+              if (widget.error != null)
+                Text(widget.error!, style: theme.textTheme.bodySmall),
             ],
           ),
+        ),
+      ],
+    );
+    final action = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            'View dues',
+            style: theme.textTheme.labelLarge?.copyWith(color: widget.color),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Icon(Icons.arrow_outward, size: 18, color: widget.color),
+      ],
+    );
+    return SoftPanel(
+      onTap: widget.onTap,
+      tone: AppTone.pending,
+      glass: true,
+      backgroundColor: PendingColors.surfaceFor(theme.brightness),
+      glassOpacity: .84,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: ExcludeSemantics(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stack =
+                constraints.maxWidth < 300 ||
+                MediaQuery.textScalerOf(context).scale(14) > 18.2;
+            return stack
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      identity,
+                      if (widget.onTap != null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        action,
+                      ],
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: identity),
+                      if (widget.onTap != null) ...[
+                        const SizedBox(width: AppSpacing.md),
+                        action,
+                      ],
+                    ],
+                  );
+          },
         ),
       ),
     );
@@ -543,6 +608,7 @@ class _CircularMetricCardState extends State<CircularMetricCard>
     return SoftPanel(
       onTap: widget.onTap,
       gradient: gradient,
+      glass: true,
       padding: const EdgeInsets.all(AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

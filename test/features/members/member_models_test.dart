@@ -29,7 +29,7 @@ void main() {
     expect(member.name, 'Alex River');
     expect(member.memberCode, 'ME01');
     expect(member.status, MemberStatus.active);
-    expect(member.branchId, isNull);
+
     expect(member.address, isNull);
     expect(member.gender, isNull);
   });
@@ -52,26 +52,24 @@ void main() {
     () {
       final summary = MemberSummary.fromJson(summaryJson());
       expect(summary.member.gymId, isNull);
-      expect(summary.branch, isNull);
+
       expect(summary.currentSubscription, isNull);
       expect(summary.currentPayments, isNull);
       expect(summary.history, isEmpty);
       expect(summary.historyPagination.total, 0);
       expect(summary.payments.totalPaise, 0);
-      expect(summary.attendance.checkedIn, isFalse);
     },
   );
   test(
     'complete summary parses snapshots, balances, attendance and trainers',
     () {
       final summary = MemberSummary.fromJson(summaryJson(populated: true));
-      expect(summary.branch!.name, 'Central');
+
       expect(summary.trainers.single.name, 'Pat Lee');
       expect(summary.currentSubscription!.pricePaise, 150000);
       expect(summary.currentSubscription!.endDate.toString(), '2026-03-31');
       expect(summary.currentPayments!.balancePaise, 149697);
       expect(summary.payments.latest!.amountPaise, 202);
-      expect(summary.attendance.latest!.status, 'completed');
     },
   );
   test('membership history and cancellation detail parsing', () {

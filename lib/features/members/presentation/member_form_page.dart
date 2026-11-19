@@ -1,3 +1,4 @@
+import '../../../shared/widgets/field_icon.dart';
 import '../photos/member_photo_widgets.dart';
 import '../photos/member_photo_providers.dart';
 import 'package:flutter/material.dart';
@@ -134,7 +135,7 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
       key: ValueKey(key),
       controller: _fields[key],
       enabled: !ref.watch(memberMutationProvider(widget.scope)).isLoading,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(labelText: label, prefixIcon: FieldIcon(key)),
       validator: validator,
       maxLength: maxLength,
       keyboardType: keyboard,
@@ -290,9 +291,13 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
                 ),
                 if (_editing)
                   DropdownButtonFormField<MemberStatus>(
+                    itemHeight: null,
                     isExpanded: true,
                     initialValue: _status,
-                    decoration: const InputDecoration(labelText: 'Status'),
+                    decoration: const InputDecoration(
+                      prefixIcon: FieldIcon('status'),
+                      labelText: 'Status',
+                    ),
                     items: MemberStatus.values
                         .map(
                           (status) => DropdownMenuItem(
@@ -310,11 +315,6 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
                     'New members are active. Login access, memberships, payments and trainer assignments are not created by this form.',
                   ),
                 const SizedBox(height: 12),
-                Text(
-                  _editing
-                      ? 'Branch assignment is preserved. Branch selection is currently unavailable.'
-                      : 'Branch selection is unavailable. This member will be created without a branch assignment.',
-                ),
                 const SizedBox(height: 16),
                 Text(
                   'Optional profile information',
@@ -324,12 +324,19 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
                 BirthDateField(
                   controller: _fields['dateOfBirth']!,
                   enabled: !busy,
+                  validator: validateMemberBirthDate,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                const Text(
+                  'Adult members only. Under-18 profile changes are unavailable until guardian authorization and verification are supported. Existing membership and payment history remains available.',
                 ),
                 const SizedBox(height: AppSpacing.md),
                 DropdownButtonFormField<String?>(
+                  itemHeight: null,
                   isExpanded: true,
                   initialValue: _gender,
                   decoration: const InputDecoration(
+                    prefixIcon: FieldIcon('gender'),
                     labelText: 'Gender (optional)',
                   ),
                   items: [

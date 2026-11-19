@@ -1,3 +1,6 @@
+import '../../../shared/widgets/field_icon.dart';
+import '../../leads/leads.dart';
+import '../../../shared/widgets/birth_date_field.dart';
 import '../photos/member_photo_widgets.dart';
 import '../photos/member_photo_providers.dart';
 import 'package:flutter/material.dart';
@@ -24,10 +27,43 @@ import 'onboarding_recovery_gate.dart';
 import 'onboarding_plan_selection.dart';
 import 'onboarding_payment_step.dart';
 import 'onboarding_review_step.dart';
+import '../../../shared/widgets/page_section.dart';
 
 class MemberOnboardingPage extends ConsumerWidget {
-  const MemberOnboardingPage({super.key, required this.gymId});
+  const MemberOnboardingPage({super.key, required this.gymId, this.prefill});
   final String? gymId;
+
+  /// Set when converting an enquiry: fills the form and links the enquiry.
+  final LeadPrefill? prefill;
+
+  Future<void> _linkEnquiry(
+    BuildContext context,
+    WidgetRef ref,
+    String gymId,
+    String memberId,
+  ) async {
+    final lead = prefill;
+    if (lead == null) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await ref
+          .read(leadRepositoryProvider)
+          .convert(gymId, lead.leadId, memberId);
+      ref.invalidate(leadProvider(lead.leadId));
+      ref.invalidate(leadsProvider);
+      messenger?.showSnackBar(
+        SnackBar(content: Text('${lead.firstName}’s enquiry marked as joined')),
+      );
+    } on LeadFailure catch (failure) {
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Member added, but the enquiry was not updated: ${failure.message}',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,10 +92,21 @@ class MemberOnboardingPage extends ConsumerWidget {
       key: ValueKey((scope.storageKey, service)),
       scope: scope,
       service: service,
+      onRegistered: prefill == null
+          ? null
+          : (memberId) => _linkEnquiry(context, ref, gym.gymId, memberId),
       freshDraft: (confirm, initialDraft, correction) => _OnboardingWizard(
         gym: gym,
         onConfirm: confirm,
-        initialDraft: initialDraft,
+        initialDraft:
+            initialDraft ??
+            (prefill == null
+                ? null
+                : OnboardingWizardState(
+                    firstName: prefill!.firstName,
+                    lastName: prefill!.lastName ?? '',
+                    phone: prefill!.phone,
+                  )),
         correction: correction,
       ),
     );
@@ -88,16 +135,26 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
   final _scroll = ScrollController();
   late OnboardingWizardState _draft;
   late final Object _initialValues;
+  late final TextEditingController _dateOfBirth;
   bool _creatingPlan = false;
   @override
   void initState() {
     super.initState();
     _draft = widget.initialDraft ?? const OnboardingWizardState();
     _initialValues = _draft.draftValues;
+    _dateOfBirth = TextEditingController(text: _draft.dateOfBirth)
+      ..addListener(_syncDateOfBirth);
+  }
+
+  // The picker writes ISO dates (YYYY-MM-DD) into the controller.
+  void _syncDateOfBirth() {
+    if (_dateOfBirth.text == _draft.dateOfBirth) return;
+    setState(() => _draft = _draft.copyWith(dateOfBirth: _dateOfBirth.text));
   }
 
   @override
   void dispose() {
+    _dateOfBirth.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -174,7 +231,11 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
       maxLength: maximum,
       keyboardType: keyboard,
       textInputAction: TextInputAction.next,
-      decoration: InputDecoration(labelText: label, counterText: ''),
+      decoration: InputDecoration(
+        labelText: label,
+        counterText: '',
+        prefixIcon: FieldIcon(key),
+      ),
     ),
   );
 
@@ -218,19 +279,24 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
           maximum: 25,
           keyboard: TextInputType.phone,
         ),
-        _field(
-          'dateOfBirth',
-          'Date of birth (optional, YYYY-MM-DD)',
-          _draft.dateOfBirth,
-          (value) => _draft = _draft.copyWith(dateOfBirth: value),
-          validator: validateBirthDate,
-          maximum: 10,
-          keyboard: TextInputType.datetime,
+        BirthDateField(
+          controller: _dateOfBirth,
+          enabled: true,
+          validator: validateMemberBirthDate,
         ),
+        const SizedBox(height: AppSpacing.sm),
+        const Text(
+          'Adult members only. Under-18 registration is unavailable until guardian authorization and verification are supported. Photos remain optional.',
+        ),
+        const SizedBox(height: AppSpacing.lg),
         DropdownButtonFormField<String>(
+          itemHeight: null,
           isExpanded: true,
           initialValue: _draft.gender,
-          decoration: const InputDecoration(labelText: 'Gender (optional)'),
+          decoration: const InputDecoration(
+            prefixIcon: FieldIcon('gender'),
+            labelText: 'Gender (optional)',
+          ),
           items: [
             const DropdownMenuItem(value: '', child: Text('Not specified')),
             for (final gender in memberGenders)
@@ -345,8 +411,9 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SoftPanel(
-                    tone: AppTone.neutral,
+                  // The step header sits on the page; the form below is
+                  // this screen's one card.
+                  PlainBlock(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

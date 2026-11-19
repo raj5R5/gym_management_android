@@ -124,7 +124,10 @@ void main() {
       container.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: container,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
     container
@@ -151,6 +154,28 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // Date of birth is chosen with the date picker in typed-input mode.
+  Future<void> pickBirthDate(WidgetTester tester, String typed) async {
+    final field = find.byKey(const ValueKey('dateOfBirth'));
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(tester.element(field), alignment: .5);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Switch to input'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(DatePickerDialog),
+        matching: find.byType(TextField),
+      ),
+      typed,
+    );
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> enter(WidgetTester tester, String key, String value) async {
     final field = find.byKey(ValueKey(key));
     await reveal(tester, field);
@@ -168,10 +193,10 @@ void main() {
       'firstName': 'Alex',
       'lastName': 'River',
       'phone': '9876543210',
-      'dateOfBirth': '2000-01-02',
     }.entries) {
       await enter(tester, entry.key, entry.value);
     }
+    await pickBirthDate(tester, '01/02/2000');
     await tap(tester, 'Continue');
     if (memberOnly) {
       await tap(tester, 'Register member only');

@@ -43,7 +43,7 @@ class DioDashboardRepository implements DashboardRepository {
         throw const FormatException('Dashboard preset mismatch.');
       }
       // A filtered or mismatched period must not be presented as all-branch data.
-      if (dashboard.period.branchId != null ||
+      if (dashboard.period.legacyBranchId != null ||
           (query.from != null &&
               (dashboard.period.from.toString() != query.from.toString() ||
                   dashboard.period.to.toString() != query.to.toString()))) {

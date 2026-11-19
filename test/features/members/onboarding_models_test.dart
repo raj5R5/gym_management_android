@@ -232,11 +232,11 @@ void main() {
       throwsFormatException,
     );
     expect(
-      () => OnboardingMembership(
+      OnboardingMembership(
         planId: onboardingPlanId,
         startDate: CalendarDate(9999, 1, 1),
-      ),
-      throwsFormatException,
+      ).startDate.toString(),
+      '9999-01-01',
     );
     expect(
       () => OnboardingPayment(

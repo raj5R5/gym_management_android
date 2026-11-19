@@ -1,3 +1,4 @@
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
@@ -30,6 +31,7 @@ class PaymentTransactionDetails extends StatelessWidget {
         Text(
           formatInrPaise(payment.amountPaise),
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontFamily: AppTypography.bodyFamily,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
@@ -56,9 +58,13 @@ class PaymentTransactionDetails extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.md),
-        Text('Payment method: ${payment.method.label}'),
-        Text(
+        IconLabel(
+          'Payment method: ${payment.method.label}',
+          icon: Icons.account_balance_wallet_outlined,
+        ),
+        IconLabel(
           'Paid: ${formatPaymentDateTime(MaterialLocalizations.of(context), payment.paidAt, timezone: timezone)}',
+          icon: Icons.event_available_outlined,
         ),
         if (payment.reference case final reference?) ...[
           const SizedBox(height: AppSpacing.sm),

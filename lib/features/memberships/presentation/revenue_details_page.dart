@@ -1,3 +1,4 @@
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -103,7 +104,7 @@ class _RevenueDetailsPageState extends ConsumerState<RevenueDetailsPage> {
           Text(
             '${dashboardDateRangeLabel(CalendarDate.parse(widget.from!), CalendarDate.parse(widget.to!))} · Inclusive',
           ),
-          const Text('Successful payments only · All branches'),
+          const Text('Successful payments only'),
           const SizedBox(height: AppSpacing.lg),
           if (data != null && (result.isLoading || result.hasError))
             FinancialRefreshStatus(
@@ -120,6 +121,7 @@ class _RevenueDetailsPageState extends ConsumerState<RevenueDetailsPage> {
             ),
           if (data != null) ...[
             SoftPanel(
+              glass: true,
               tone: AppTone.payment,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -132,12 +134,19 @@ class _RevenueDetailsPageState extends ConsumerState<RevenueDetailsPage> {
                   Text(
                     formatInrPaise(data.amountPaise),
                     key: const ValueKey('revenueTotal'),
-                    style: Theme.of(context).textTheme.headlineMedium,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontFamily: AppTypography.bodyFamily,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                   Text(
                     '${data.count} successful ${data.count == 1 ? 'payment' : 'payments'}',
                   ),
-                  Text('Gym timezone: ${data.period.timezone}'),
+                  IconLabel(
+                    'Gym timezone: ${data.period.timezone}',
+                    icon: Icons.schedule,
+                  ),
                   const Text('The date range follows the gym timezone.'),
                 ],
               ),
@@ -157,7 +166,10 @@ class _RevenueDetailsPageState extends ConsumerState<RevenueDetailsPage> {
                       ),
                       child: Text(transaction.member.name),
                     ),
-                    Text('Member code: ${transaction.member.memberCode}'),
+                    IconLabel(
+                      'Member code: ${transaction.member.memberCode}',
+                      icon: Icons.badge_outlined,
+                    ),
                     const SizedBox(height: AppSpacing.md),
                     PaymentTransactionDetails(
                       payment: transaction.payment,

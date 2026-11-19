@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../members/providers/member_overview_providers.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../../auth/models/session_state.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -87,6 +88,7 @@ class BillingMutationController extends AsyncNotifier<BillingResult?> {
       ref.read(sessionControllerProvider) is SessionAuthenticated;
   void _invalidate() {
     ref.invalidate(membersProvider);
+    ref.invalidate(memberOverviewProvider);
     ref.invalidate(renewalPreviewProvider);
     ref.invalidate(memberSummaryProvider(scope));
     // All cached history pages/details may shift after a mutation.

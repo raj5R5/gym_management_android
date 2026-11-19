@@ -1,4 +1,6 @@
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../../shared/widgets/feedback_notice.dart';
 import '../../../shared/widgets/profile_section.dart';
 import '../../members/data/member_failure.dart';
@@ -79,20 +81,29 @@ class BillingResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ProfileSection(
     title: 'Server confirmation',
+    icon: Icons.verified_outlined,
+    tone: AppTone.positive,
     children: [
       Text(result.subscription.planName),
-      Text('Status: ${result.subscription.status}'),
-      Text(
-        '${MaterialLocalizations.of(context).formatShortDate(result.subscription.startDate.value)} → ${MaterialLocalizations.of(context).formatShortDate(result.subscription.endDate.value)} (end exclusive, UTC)',
+      IconLabel(
+        'Status: ${result.subscription.status}',
+        icon: Icons.verified_user_outlined,
       ),
       Text(
+        '${MaterialLocalizations.of(context).formatShortDate(result.subscription.startDate.value)} → ${MaterialLocalizations.of(context).formatShortDate(result.subscription.endDate.value)} (end exclusive, gym timezone)',
+      ),
+      IconLabel(
         'Plan snapshot: ${formatInrPaise(result.subscription.pricePaise)} · ${result.subscription.durationDays} days',
+        icon: Icons.sell_outlined,
       ),
       if (result.payment case final RecordedPayment payment) ...[
         PaymentTransactionDetails(payment: payment, timezone: timezone),
       ],
       if (result.subscription.cancellationReason != null)
-        Text('Cancellation reason: ${result.subscription.cancellationReason}'),
+        IconLabel(
+          'Cancellation reason: ${result.subscription.cancellationReason}',
+          icon: Icons.notes_outlined,
+        ),
     ],
   );
 }

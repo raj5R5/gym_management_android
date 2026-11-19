@@ -71,7 +71,10 @@ class MembershipPlan {
       durationDays = integer(json, 'durationDays'),
       pricePaise = integer(json, 'price'),
       status = text(json, 'status'),
-      description = optionalText(json, 'description') {
+      description = optionalText(json, 'description'),
+      activeMemberCount = json['activeMemberCount'] is int
+          ? json['activeMemberCount'] as int
+          : null {
     if (durationDays < 1 ||
         durationDays > 3650 ||
         pricePaise > maximumPaymentPaise ||
@@ -82,6 +85,9 @@ class MembershipPlan {
   final String id, gymId, name, status;
   final int durationDays, pricePaise;
   final String? description;
+
+  /// Members currently on this plan; null from servers that don't report it.
+  final int? activeMemberCount;
 }
 
 class BillingPage<T> {

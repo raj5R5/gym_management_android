@@ -28,6 +28,7 @@ import '../auth/auth_fakes.dart';
 import '../memberships/billing_fakes.dart';
 import 'package:gym_management_app/features/memberships/providers/membership_providers.dart';
 import 'package:gym_management_app/features/memberships/models/billing_models.dart';
+import 'package:gym_management_app/features/members/providers/member_overview_providers.dart';
 import 'member_fakes.dart';
 import 'onboarding_fakes.dart';
 
@@ -102,6 +103,11 @@ void main() {
         ),
         dashboardRepositoryProvider.overrideWithValue(dashboardRepository),
         memberRepositoryProvider.overrideWithValue(membersRepository),
+        // The members list sits under the onboarding page; keep its reads
+        // off the network like every other repository here.
+        memberOverviewRepositoryProvider.overrideWithValue(
+          FakeMemberOverviewRepository(membersRepository),
+        ),
         membershipRepositoryProvider.overrideWithValue(billingRepository),
         memberOnboardingRepositoryProvider.overrideWithValue(
           recoveryRepository ?? repository,
@@ -119,7 +125,10 @@ void main() {
       container.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: container,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
     container

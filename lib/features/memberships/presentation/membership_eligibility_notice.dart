@@ -22,6 +22,7 @@ class MembershipEligibilityNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ProfileSection(
     title: 'Membership already available',
+    icon: Icons.event_available_outlined,
     tone: AppTone.plan,
     children: [
       const Text(activeMembershipMessage),
@@ -30,7 +31,9 @@ class MembershipEligibilityNotice extends StatelessWidget {
         start: membership.startDate.value,
         end: membership.endDate.value,
       ),
-      const Text('Eligible once the end date above is reached (UTC).'),
+      const Text(
+        'Eligible once the end date above is reached in the gym timezone.',
+      ),
       FilledButton.icon(
         onPressed:
             onView ??

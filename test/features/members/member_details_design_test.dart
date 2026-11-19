@@ -13,6 +13,7 @@ import 'package:gym_management_app/shared/widgets/soft_panel.dart';
 import 'package:gym_management_app/shared/widgets/profile_section.dart';
 import 'package:gym_management_app/core/config/app_config.dart';
 import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_providers.dart';
+import 'package:gym_management_app/features/admin_dashboard/models/dashboard_models.dart';
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/members/data/member_failure.dart';
 import 'package:gym_management_app/features/members/models/member_models.dart';
@@ -31,6 +32,7 @@ import 'package:gym_management_app/features/memberships/models/billing_models.da
 import 'package:gym_management_app/features/memberships/providers/membership_providers.dart';
 import 'package:gym_management_app/features/memberships/providers/payment_providers.dart';
 import 'package:gym_management_app/features/memberships/data/pending_payment_store.dart';
+import 'package:gym_management_app/features/members/providers/member_overview_providers.dart';
 import 'package:gym_management_app/features/members/data/pending_onboarding_store.dart'
     show OnboardingOperationQueue;
 import '../auth/auth_fakes.dart';
@@ -112,6 +114,7 @@ void main() {
     WidgetTester tester, {
     bool details = true,
     TestOnboardingStorage? recoveryStorage,
+    FakeDashboardRepository? dashboard,
   }) async {
     payments = FakePaymentRepository()..onCollection = members.collect;
     members.profiles = [MemberProfile.fromJson(members.memberFields)];
@@ -130,9 +133,13 @@ void main() {
           FakeCredentialStorage()..value = syntheticCredential(),
         ),
         dashboardRepositoryProvider.overrideWithValue(
-          FakeDashboardRepository(),
+          dashboard ?? FakeDashboardRepository(),
         ),
         memberRepositoryProvider.overrideWithValue(members),
+        // The members list sits under member details; keep it off the network.
+        memberOverviewRepositoryProvider.overrideWithValue(
+          FakeMemberOverviewRepository(members),
+        ),
         membershipRepositoryProvider.overrideWithValue(
           FakeMembershipRepository(),
         ),
@@ -150,7 +157,10 @@ void main() {
       container.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: container,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
     if (details) {
@@ -182,6 +192,148 @@ void main() {
   Finder currentCard() => find.byType(MemberCurrentMembershipCard);
   Finder financeCard() => find.byType(MemberPaymentSummaryCard);
   setUp(() => members = DetailsFake());
+
+  for (final zone in ['Asia/Kolkata', 'UTC']) {
+    testWidgets('overview passes gym timezone $zone to latest payment', (
+      tester,
+    ) async {
+      final json = dashboardJson();
+      (json['period'] as Map)['timezone'] = zone;
+      final dashboard = FakeDashboardRepository()
+        ..result = GymDashboard.fromJson(json);
+      await mount(tester, dashboard: dashboard);
+      await reveal(tester, find.text('Total paid'));
+      expect(
+        tester
+            .widget<MemberLatestPayment>(find.byType(MemberLatestPayment))
+            .timezone,
+        zone,
+      );
+    });
+  }
+
+  testWidgets('latest payment rejects stale timezone metadata during refresh', (
+    tester,
+  ) async {
+    final dashboard = FakeDashboardRepository();
+    await mount(tester, dashboard: dashboard);
+    await reveal(tester, find.text('Total paid'));
+    String? displayedZone() => tester
+        .widget<MemberLatestPayment>(find.byType(MemberLatestPayment))
+        .timezone;
+    expect(displayedZone(), 'Asia/Kolkata');
+
+    dashboard.gate = Completer<GymDashboard>();
+    container.invalidate(dashboardProvider);
+    await tester.pump();
+    expect(displayedZone(), isNull);
+
+    dashboard.gate!.completeError(StateError('Timezone metadata unavailable'));
+    await tester.pumpAndSettle();
+    expect(displayedZone(), isNull);
+
+    dashboard.gate = null;
+    final json = dashboardJson();
+    (json['period'] as Map)['timezone'] = 'UTC';
+    dashboard.result = GymDashboard.fromJson(json);
+    container.invalidate(dashboardProvider);
+    await tester.pumpAndSettle();
+    expect(displayedZone(), 'UTC');
+  });
+
+  testWidgets(
+    'owner overview puts identity, membership and money before secondary details',
+    (tester) async {
+      await mount(tester);
+      final rows =
+          tester
+                  .widget<ListView>(
+                    find
+                        .descendant(
+                          of: find.byType(MemberDetailsPage),
+                          matching: find.byType(ListView),
+                        )
+                        .last,
+                  )
+                  .childrenDelegate
+              as SliverChildListDelegate;
+      final types = rows.children.map((widget) => widget.runtimeType).toList();
+      expect(
+        types.indexOf(MemberProfileCard),
+        lessThan(types.indexOf(MemberCurrentMembershipCard)),
+      );
+      expect(
+        types.indexOf(MemberCurrentMembershipCard),
+        lessThan(types.indexOf(MemberPaymentSummaryCard)),
+      );
+      expect(
+        types.indexOf(MemberPaymentSummaryCard),
+        lessThan(types.indexOf(MemberPersonalDetails)),
+      );
+      await reveal(tester, find.text('Contact & personal details'));
+      expect(find.text('Phone'), findsNothing);
+      await tester.tap(find.text('Contact & personal details'));
+      await tester.pumpAndSettle();
+      expect(find.text('Phone'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'expired with dues explains renewal separately from collectible debt',
+    (tester) async {
+      members.debts[memberId] = [debtJson(status: 'expired')];
+      await mount(tester);
+      await reveal(tester, find.text('Membership expired'));
+      expect(find.text('No current membership.'), findsOneWidget);
+      await reveal(tester, find.text('Pay Now'));
+      expect(
+        find.descendant(of: financeCard(), matching: find.text('₹500.00')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('including expired plans'), findsOneWidget);
+      expect(payments.collections, isEmpty);
+    },
+  );
+
+  testWidgets('suspended profile is distinct from an active paid membership', (
+    tester,
+  ) async {
+    members.memberFields['status'] = 'suspended';
+    members.debts[memberId] = [debtJson(balance: 0)];
+    await mount(tester);
+    expect(find.text('Suspended'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
+    await reveal(tester, find.text('Fully Paid'));
+    expect(find.text('Membership: Active'), findsOneWidget);
+    await reveal(tester, find.text('Current outstanding'));
+    expect(find.text('Pay Now'), findsNothing);
+    expect(
+      find.text('No outstanding dues across non-cancelled memberships.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('paid current plan does not hide debt from an expired plan', (
+    tester,
+  ) async {
+    members.debts[memberId] = [
+      debtJson(balance: 0),
+      debtJson(id: gymB, balance: 70000, status: 'expired')
+        ..['planNameSnapshot'] = 'Older plan',
+    ];
+    await mount(tester);
+    await reveal(tester, find.text('Fully Paid'));
+    expect(
+      find.descendant(of: currentCard(), matching: find.text('₹0.00')),
+      findsOneWidget,
+    );
+    await reveal(tester, find.text('Pay Now'));
+    expect(
+      find.descendant(of: financeCard(), matching: find.text('₹700.00')),
+      findsOneWidget,
+    );
+    expect(payments.collections, isEmpty);
+  });
 
   testWidgets(
     'profile uses initials, actual optional fields and a working compact edit action',
@@ -215,7 +367,9 @@ void main() {
       expect(find.text('Alex River'), findsOneWidget);
       expect(find.text('Member code: ME01'), findsOneWidget);
       expect(find.byType(MemberStatusBadge), findsOneWidget);
-      await reveal(tester, find.text('+91 9876543210'));
+      await reveal(tester, find.text('Contact & personal details'));
+      await tester.tap(find.text('Contact & personal details'));
+      await tester.pumpAndSettle();
       expect(find.text('Oct 12, 2000'), findsOneWidget);
       expect(find.text('Prefer Not To Say'), findsOneWidget);
       expect(find.textContaining('12 Main Street'), findsOneWidget);
@@ -239,8 +393,10 @@ void main() {
       expect(find.text('Gender'), findsNothing);
       expect(find.text('Email'), findsNothing);
       expect(find.text('Address'), findsNothing);
-      await reveal(tester, find.text('Gym & trainers'));
-      expect(find.text('Central (active)'), findsOneWidget);
+      await reveal(tester, find.text('Assigned trainers'));
+      await tester.tap(find.text('Assigned trainers'));
+      await tester.pumpAndSettle();
+      expect(find.text('Central (active)'), findsNothing);
       expect(find.textContaining('Pat Lee'), findsOneWidget);
       expect(find.text('Emergency contact'), findsNothing);
       expect(find.text('Attendance'), findsNothing);
@@ -260,9 +416,34 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: card, matching: find.text('Plan price: ₹1,500.00')),
+        find.descendant(
+          of: card,
+          matching: find.text('Saved plan price: ₹1,500.00'),
+        ),
         findsOneWidget,
       );
+      for (final label in [
+        '≈1',
+        'Months (approx.)',
+        '30',
+        'Total days',
+        'Membership dates · gym timezone',
+      ]) {
+        expect(
+          find.descendant(of: card, matching: find.text(label)),
+          findsOneWidget,
+        );
+      }
+      await reveal(tester, find.byTooltip('Explain duration for Monthly'));
+      await tester.tap(find.byTooltip('Explain duration for Monthly'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('lasts exactly 30 days'), findsOneWidget);
+      expect(
+        find.textContaining('It does not mean calendar months.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Got it'));
+      await tester.pumpAndSettle();
       expect(
         find.descendant(of: card, matching: find.text('1 Mar 2026 –')),
         findsOneWidget,
@@ -297,6 +478,38 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'current duration uses the saved subscription snapshot rather than the plan name or remaining time',
+    (tester) async {
+      members.debts[memberId] = [
+        debtJson()..addAll({
+          'planNameSnapshot': 'Monthly legacy offer',
+          'durationDaysSnapshot': 95,
+          'startDate': '2026-01-01',
+          'endDate': '2026-04-06',
+        }),
+      ];
+      await mount(tester);
+      await reveal(tester, find.text('Current membership'));
+      for (final value in ['≈3.17', '95', 'Saved plan price: ₹1,500.00']) {
+        expect(
+          find.descendant(of: currentCard(), matching: find.text(value)),
+          findsOneWidget,
+        );
+      }
+      await reveal(
+        tester,
+        find.byTooltip('Explain duration for Monthly legacy offer'),
+      );
+      await tester.tap(
+        find.byTooltip('Explain duration for Monthly legacy offer'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('lasts exactly 95 days'), findsOneWidget);
+      expect(members.writes, isEmpty);
+      expect(payments.collections, isEmpty);
+    },
+  );
   for (final status in ['expired', 'cancelled']) {
     testWidgets(
       '$status history never appears as current and respects purchase/payment eligibility',
@@ -314,6 +527,7 @@ void main() {
           expect(find.text('Pay Now'), findsOneWidget);
         } else {
           expect(find.text('Pay Now'), findsNothing);
+          expect(find.text('Previous membership cancelled'), findsOneWidget);
         }
         await reveal(tester, find.text('Membership history'));
         expect(
@@ -347,6 +561,13 @@ void main() {
       await mount(tester);
       await reveal(tester, find.text('No current membership.'));
       expect(find.textContaining('upcoming membership'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: currentCard(),
+          matching: find.text('Membership: Upcoming'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Purchase membership'), findsNothing);
       expect(
         find.descendant(of: currentCard(), matching: find.text('1 Jan 2027 –')),
@@ -581,8 +802,8 @@ void main() {
       final next = find.byTooltip('Next page');
       await tester.scrollUntilVisible(
         next,
-        500,
-        maxScrolls: 60,
+        200,
+        maxScrolls: 100,
         scrollable: find
             .descendant(
               of: find.byType(ListView).last,
@@ -634,7 +855,10 @@ void main() {
       members.historyFailure = null;
       final retry = find.descendant(
         of: history,
-        matching: find.widgetWithText(TextButton, 'Retry'),
+        matching: find.ancestor(
+          of: find.text('Retry'),
+          matching: find.byWidgetPredicate((widget) => widget is TextButton),
+        ),
       );
       await reveal(tester, retry);
       await tester.tap(retry);
@@ -672,8 +896,27 @@ void main() {
       expect(find.text('Profile refresh failed.'), findsOneWidget);
       expect(find.textContaining('last verified'), findsWidgets);
       members.summaryFailure = null;
-      await reveal(tester, find.widgetWithText(TextButton, 'Retry').first);
-      await tester.tap(find.widgetWithText(TextButton, 'Retry').first);
+      await reveal(
+        tester,
+        find
+            .ancestor(
+              of: find.text('Retry'),
+              matching: find.byWidgetPredicate(
+                (widget) => widget is TextButton,
+              ),
+            )
+            .first,
+      );
+      await tester.tap(
+        find
+            .ancestor(
+              of: find.text('Retry'),
+              matching: find.byWidgetPredicate(
+                (widget) => widget is TextButton,
+              ),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
       expect(find.text('Profile refresh failed.'), findsNothing);
     },
@@ -748,7 +991,7 @@ void main() {
       'Alex River',
       'Current membership',
       'Payment summary',
-      'Gym & trainers',
+      'Assigned trainers',
       'Membership history',
     ]) {
       await reveal(tester, find.text(title));
@@ -824,12 +1067,50 @@ void main() {
       );
       expect(find.byType(Icon), findsNothing);
       expect(find.text('Saved content'), findsOneWidget);
-      expect(
-        tester.widget<SoftPanel>(find.byType(SoftPanel)).tone,
-        AppTone.neutral,
-      );
+      // Neutral sections sit on the page; space separates them.
+      expect(find.byType(SoftPanel), findsNothing);
     },
   );
+
+  testWidgets('toned sections and the main block keep their panel', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: const Scaffold(
+          body: Column(
+            children: [
+              ProfileSection(
+                title: 'Plan',
+                tone: AppTone.plan,
+                children: [Text('Plan content')],
+              ),
+              ProfileSection(
+                title: 'Balance',
+                card: true,
+                icon: Icons.account_balance_wallet_outlined,
+                children: [Text('Balance content')],
+              ),
+              ProfileSection(
+                title: 'Plain',
+                icon: Icons.info_outline,
+                children: [Text('Plain content')],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final panels = tester.widgetList<SoftPanel>(find.byType(SoftPanel));
+    expect(panels.map((panel) => panel.tone), [
+      AppTone.plan,
+      AppTone.neutral,
+    ]);
+    // Only the boxed section shows its heading icon.
+    expect(find.byIcon(Icons.account_balance_wallet_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.info_outline), findsNothing);
+  });
 
   for (final brightness in Brightness.values) {
     testWidgets('neutral profile surface keeps text contrast in $brightness', (
@@ -860,11 +1141,7 @@ void main() {
         ).panel(panel.tone, brightness),
       ];
       final context = tester.element(find.text('Alex River'));
-      for (final label in [
-        'MEMBER PROFILE',
-        'Alex River',
-        'Member code: ME01',
-      ]) {
+      for (final label in ['Alex River', 'Member code: ME01']) {
         final text = tester.widget<Text>(find.text(label));
         final color =
             text.style?.color ?? Theme.of(context).colorScheme.onSurface;
@@ -1021,39 +1298,35 @@ void main() {
     );
   }
   testWidgets(
-    'one floating payment action uses a reserved footer and no competing inline primary',
+    'payment action belongs to the financial summary and never overlays membership content',
     (tester) async {
       await mount(tester);
-      expect(find.byType(FloatingActionButton), findsOneWidget);
-      final button = tester.getRect(find.byType(FloatingActionButton));
-      final list = tester.getRect(
-        find
-            .descendant(
-              of: find.byType(MemberDetailsPage),
-              matching: find.byType(ListView),
-            )
-            .last,
+      expect(find.byType(FloatingActionButton), findsNothing);
+      await reveal(tester, find.text('Pay Now'));
+      final pay = find.ancestor(
+        of: find.text('Pay Now'),
+        matching: find.byWidgetPredicate((widget) => widget is FilledButton),
       );
-      expect(button.top, greaterThanOrEqualTo(list.bottom));
+      expect(find.descendant(of: financeCard(), matching: pay), findsOneWidget);
+      expect(pay.hitTestable(), findsOneWidget);
       expect(
-        button.bottom,
+        tester.getBottomLeft(pay).dy,
         lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
-      );
-      await reveal(tester, find.text('Payment summary'));
-      expect(
-        find.descendant(
-          of: financeCard(),
-          matching: find.byType(FloatingActionButton),
-        ),
-        findsNothing,
       );
       expect(find.text('Pay Now'), findsOneWidget);
       expect(payments.collections, isEmpty);
+      final memberScaffolds = find.descendant(
+        of: find.byType(MemberDetailsPage),
+        matching: find.byType(Scaffold),
+      );
+      for (final widget in tester.widgetList<Scaffold>(memberScaffolds)) {
+        expect(widget.floatingActionButton, isNull);
+      }
     },
   );
 
   testWidgets(
-    'dues has no floating collection action and its card opens Member Details',
+    'dues card opens Member Details with its guarded inline collection action',
     (tester) async {
       await mount(tester);
       container
@@ -1066,30 +1339,43 @@ void main() {
       await tester.tap(find.text('Alex River'));
       await tester.pumpAndSettle();
       expect(find.byType(MemberDetailsPage), findsOneWidget);
-      expect(find.byType(FloatingActionButton), findsOneWidget);
+      await reveal(tester, find.text('Pay Now'));
+      expect(
+        find.ancestor(
+          of: find.text('Pay Now'),
+          matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+        ),
+        findsOneWidget,
+      );
     },
   );
 
-  testWidgets(
-    'durable-operation verification hides the floating collection until ready',
-    (tester) async {
-      final storage = TestOnboardingStorage();
-      await mount(tester, recoveryStorage: storage);
-      final scope = (
-        member: scopeFor(container.read(adminGymProvider)!, memberId),
-        subscriptionId: subscriptionId,
-      );
-      storage.readGate = Completer<void>();
-      container.invalidate(paymentCollectionProvider(scope));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.byType(FloatingActionButton), findsNothing);
-      expect(payments.collections, isEmpty);
-      storage.readGate!.complete();
-      await tester.pumpAndSettle();
-      expect(find.byType(FloatingActionButton), findsOneWidget);
-    },
-  );
+  testWidgets('durable-operation verification hides collection until ready', (
+    tester,
+  ) async {
+    final storage = TestOnboardingStorage();
+    await mount(tester, recoveryStorage: storage);
+    await reveal(tester, find.text('Payment summary'));
+    final scope = (
+      member: scopeFor(container.read(adminGymProvider)!, memberId),
+      subscriptionId: subscriptionId,
+    );
+    storage.readGate = Completer<void>();
+    container.invalidate(paymentCollectionProvider(scope));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Pay Now'), findsNothing);
+    expect(payments.collections, isEmpty);
+    storage.readGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: find.text('Pay Now'),
+        matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets(
     'unresolved saved collection hides Pay Now and opens the existing recovery sheet',
@@ -1115,7 +1401,7 @@ void main() {
         50000,
       );
       await tester.pumpAndSettle();
-      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.text('Pay Now'), findsNothing);
       expect(find.text('Pay Now'), findsNothing);
       await reveal(tester, find.text('Review saved payment · Monthly'));
       await tester.tap(find.text('Review saved payment · Monthly'));
@@ -1139,7 +1425,7 @@ void main() {
       storage.failRead = true;
       container.invalidate(paymentCollectionProvider(scope));
       await tester.pumpAndSettle();
-      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.text('Pay Now'), findsNothing);
       expect(payments.collections, isEmpty);
       await reveal(tester, find.text('Review saved payment · Monthly'));
       expect(find.text('Review saved payment · Monthly'), findsOneWidget);
@@ -1183,24 +1469,6 @@ void main() {
     },
   );
 
-  testWidgets(
-    'routed directory uses complete dues when the current membership is settled',
-    (tester) async {
-      members.debts[memberId] = [
-        debtJson(balance: 0),
-        debtJson(id: gymB, balance: 70000, status: 'expired'),
-      ];
-      await mount(tester);
-      container.read(appRouterProvider).go(AppRoutes.members);
-      await tester.pumpAndSettle();
-      await reveal(tester, find.text('Alex River'));
-      expect(find.text('₹700.00 due'), findsOneWidget);
-      expect(find.text('Fully Paid'), findsNothing);
-      final card = find.ancestor(
-        of: find.text('₹700.00 due'),
-        matching: find.byType(Card),
-      );
-      expect(tester.widget<Card>(card).color, PendingColors.surface);
-    },
-  );
+  // Directory dues are computed by the server's member overview now; see the
+  // backend overview tests and member_widgets_test 'dues row offers Collect'.
 }

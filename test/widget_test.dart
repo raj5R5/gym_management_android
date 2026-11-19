@@ -14,7 +14,9 @@ void main() {
   ) async {
     FlutterSecureStorage.setMockInitialValues({});
     entrypoint.main();
-    await tester.pumpAndSettle();
+    // Decorative autoplay intentionally never settles; advance startup explicitly.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
     expect(find.byType(ProviderScope), findsOneWidget);
     expect(find.text('Sign in to your account'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -41,7 +43,7 @@ void main() {
   for (final scenario in [
     (environment: 'staging', release: false),
     (environment: 'production', release: false),
-    (environment: 'development', release: true),
+    (environment: 'production', release: true),
   ]) {
     testWidgets(
       'home protected for ${scenario.environment}, release=${scenario.release}',
@@ -50,7 +52,9 @@ void main() {
           tester,
           config: AppConfig.fromValues(
             environmentName: scenario.environment,
-            apiBaseUrl: 'https://api.example.invalid/api/v1/',
+            apiBaseUrl: scenario.release
+                ? AppConfig.productionApiBaseUrl
+                : 'https://api.example.invalid/api/v1/',
             isRelease: scenario.release,
           ),
         );

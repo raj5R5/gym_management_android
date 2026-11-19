@@ -1,4 +1,6 @@
 import 'package:gym_management_app/features/members/photos/member_photo_providers.dart';
+import 'package:gym_management_app/features/adjustments/adjustments.dart';
+import '../money/adjustment_fakes.dart';
 import '../members/photo_fakes.dart';
 import 'package:gym_management_app/features/memberships/data/pending_payment_store.dart';
 import 'package:gym_management_app/features/members/data/pending_onboarding_store.dart'
@@ -93,6 +95,9 @@ void main() {
         memberRepositoryProvider.overrideWithValue(members),
         trainerRepositoryProvider.overrideWithValue(FakeTrainerRepository()),
         membershipRepositoryProvider.overrideWithValue(billing),
+        adjustmentRepositoryProvider.overrideWithValue(
+          FakeAdjustmentRepository(),
+        ),
       ],
     );
     addTearDown(() async {
@@ -100,7 +105,10 @@ void main() {
       container.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: container,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
     container
@@ -399,7 +407,13 @@ void main() {
     await tester.pumpAndSettle();
     await reveal(tester, find.text('Safe offline message'));
     billing.failure = null;
-    await tap(tester, find.widgetWithText(TextButton, 'Retry'));
+    await tap(
+      tester,
+      find.ancestor(
+        of: find.text('Retry'),
+        matching: find.byWidgetPredicate((widget) => widget is TextButton),
+      ),
+    );
     expect(find.text('No successful payments.'), findsOneWidget);
   });
   testWidgets('uncertain purchase disables retry and exposes history recheck', (
@@ -615,7 +629,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Plans unavailable'), findsOneWidget);
     billing.failure = null;
-    await tap(tester, find.widgetWithText(TextButton, 'Retry'));
+    await tap(
+      tester,
+      find.ancestor(
+        of: find.text('Retry'),
+        matching: find.byWidgetPredicate((widget) => widget is TextButton),
+      ),
+    );
     expect(find.widgetWithText(ListTile, 'Monthly'), findsOneWidget);
   });
   Future<void> fillPlan(
@@ -682,11 +702,16 @@ void main() {
     await tester.pumpAndSettle();
     await tap(tester, find.widgetWithText(OutlinedButton, 'Membership Plans'));
     expect(find.text('₹1,500.00'), findsOneWidget);
-    expect(find.text('30 days · Active'), findsOneWidget);
+    expect(find.text('≈1'), findsOneWidget);
+    expect(find.text('30'), findsOneWidget);
+    expect(find.text('Months (approx.)'), findsOneWidget);
+    expect(find.text('Total days'), findsOneWidget);
+    expect(find.text('Active'), findsOneWidget);
     billing.total = 21;
     container.invalidate(managedPlansProvider);
     await tester.pumpAndSettle();
     await tap(tester, find.byTooltip('Next page'));
+    await reveal(tester, find.text('Page 2 · 21 total'));
     expect(find.text('Page 2 · 21 total'), findsOneWidget);
     await tester.drag(find.byType(ListView).last, const Offset(0, 350));
     await tester.pumpAndSettle();
@@ -764,7 +789,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Safe plan error'), findsOneWidget);
     billing.failure = null;
-    await tap(tester, find.widgetWithText(TextButton, 'Retry'));
+    await tap(
+      tester,
+      find.ancestor(
+        of: find.text('Retry'),
+        matching: find.byWidgetPredicate((widget) => widget is TextButton),
+      ),
+    );
     await tap(
       tester,
       find.widgetWithText(FilledButton, 'Create membership plan'),
@@ -858,7 +889,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(container.read(appRouterProvider).state.uri.path, AppRoutes.more);
     expect(find.byType(NavigationBar), findsNothing);
-    expect(find.text('Your account'), findsOneWidget);
+    expect(find.text('Owner profile'), findsOneWidget);
     expect(find.text('Membership Plans'), findsOneWidget);
     await tap(tester, find.widgetWithText(FilledButton, 'Logout'));
     expect(find.text('Sign in to your account'), findsOneWidget);
@@ -996,7 +1027,7 @@ void main() {
     expect(find.text('Current plan duration: 30 days'), findsOneWidget);
     expect(find.text('To record now: ₹1,500.00'), findsOneWidget);
     expect(find.text('New membership balance: ₹0.00'), findsOneWidget);
-    await tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+    await tap(tester, find.widgetWithText(TextButton, 'Not now'));
     expect(billing.renewals, isEmpty);
     expect(billing.operations.where((e) => e.startsWith('cancel:')), isEmpty);
     expect(find.text('Server confirmation'), findsNothing);
@@ -1035,7 +1066,13 @@ void main() {
       expect(find.text('Preview could not be loaded.'), findsOneWidget);
       expect(billing.renewals, isEmpty);
       billing.previewGate = null;
-      await tap(tester, find.widgetWithText(TextButton, 'Retry'));
+      await tap(
+        tester,
+        find.ancestor(
+          of: find.text('Retry'),
+          matching: find.byWidgetPredicate((widget) => widget is TextButton),
+        ),
+      );
       expect(find.text('Renewal price: ₹1,500.00'), findsOneWidget);
       expect(billing.renewals, isEmpty);
     },
@@ -1063,7 +1100,13 @@ void main() {
         }
         ..['outstandingBalancePaise'] = 180000;
       expect(RenewalPreview.fromJson(billing.previewJson!).pricePaise, 180000);
-      await tap(tester, find.widgetWithText(TextButton, 'Retry'));
+      await tap(
+        tester,
+        find.ancestor(
+          of: find.text('Retry'),
+          matching: find.byWidgetPredicate((widget) => widget is TextButton),
+        ),
+      );
       expect(find.text('Renewal price: ₹1,800.00'), findsOneWidget);
       expect(billing.renewals.length, 1);
       await tap(tester, find.widgetWithText(FilledButton, 'Confirm Renewal'));
@@ -1090,7 +1133,7 @@ void main() {
     expect(find.text('Confirming renewal…'), findsOneWidget);
     expect(
       tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'))
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Not now'))
           .onPressed,
       isNull,
     );
@@ -1143,7 +1186,7 @@ void main() {
     );
     await reveal(tester, find.widgetWithText(FilledButton, 'Confirm Renewal'));
     expect(tester.takeException(), isNull);
-    await tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+    await tap(tester, find.widgetWithText(TextButton, 'Not now'));
     expect(billing.renewals, isEmpty);
   });
   testWidgets(
@@ -1163,10 +1206,10 @@ void main() {
         find.widgetWithText(FilledButton, 'Confirm Renewal'),
         findsNothing,
       );
-      await tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+      await tap(tester, find.widgetWithText(TextButton, 'Not now'));
       await tap(tester, find.widgetWithText(FilledButton, 'Review renewal'));
       expect(find.textContaining('Recover saved renewal'), findsOneWidget);
-      await tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+      await tap(tester, find.widgetWithText(TextButton, 'Not now'));
       expect(billing.renewals.length, 1);
     },
   );
@@ -1191,7 +1234,7 @@ void main() {
     expect(find.text('Server confirmation'), findsNothing);
     expect(billing.renewals.length, 1);
     expect(find.widgetWithText(FilledButton, 'Confirm Renewal'), findsNothing);
-    await tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+    await tap(tester, find.widgetWithText(TextButton, 'Not now'));
     expect(find.text('Server confirmation'), findsNothing);
   });
   Future<void> cancellation(WidgetTester tester) =>
@@ -1315,7 +1358,10 @@ void main() {
         tester,
         find.descendant(
           of: find.byType(CancellationConfirmationSheet),
-          matching: find.widgetWithText(TextButton, 'Retry'),
+          matching: find.ancestor(
+            of: find.text('Retry'),
+            matching: find.byWidgetPredicate((widget) => widget is TextButton),
+          ),
         ),
       );
       expect(find.text('Outstanding balance'), findsOneWidget);
@@ -1352,7 +1398,10 @@ void main() {
       tester,
       find.descendant(
         of: find.byType(CancellationConfirmationSheet),
-        matching: find.widgetWithText(TextButton, 'Retry'),
+        matching: find.ancestor(
+          of: find.text('Retry'),
+          matching: find.byWidgetPredicate((widget) => widget is TextButton),
+        ),
       ),
     );
     expect(find.text('Outstanding balance'), findsOneWidget);
@@ -1742,7 +1791,7 @@ void main() {
     await tap(tester, find.widgetWithText(FilledButton, 'Review renewal'));
     expect(find.textContaining('No active membership plans.'), findsOneWidget);
     expect(billing.renewals, isEmpty);
-    await tap(tester, find.widgetWithText(TextButton, 'Cancel'));
+    await tap(tester, find.widgetWithText(TextButton, 'Not now'));
     billing.empty = false;
     billing.failure = const BillingFailure('Plans unavailable.');
     await tap(tester, find.widgetWithText(FilledButton, 'Review renewal'));

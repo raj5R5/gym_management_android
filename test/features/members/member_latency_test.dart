@@ -9,7 +9,8 @@ import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/auth/providers/session_controller.dart';
 import 'package:gym_management_app/features/members/data/member_repository.dart';
-import 'package:gym_management_app/features/members/data/member_failure.dart';
+import 'package:gym_management_app/features/members/data/member_overview_repository.dart';
+import 'package:gym_management_app/features/members/providers/member_overview_providers.dart';
 import 'package:gym_management_app/features/members/models/member_models.dart';
 import 'package:gym_management_app/features/members/presentation/members_page.dart';
 import 'package:gym_management_app/features/members/providers/member_providers.dart';
@@ -28,14 +29,6 @@ MembershipHistory history({int balance = 50000}) =>
       },
       {'page': 1, 'limit': 20, 'total': 1},
     );
-
-class _FailingSecondPage extends DueMembersFake {
-  @override
-  Future<MembershipHistory> memberships(String gymId, String id, int page) {
-    if (page == 2) throw const MemberFailure('History page unavailable.');
-    return super.memberships(gymId, id, page);
-  }
-}
 
 void main() {
   late ProviderContainer container;
@@ -241,7 +234,7 @@ void main() {
   });
 
   testWidgets(
-    '20-member directory makes 21 Dio requests, no summaries, and refreshes once',
+    '20-member list makes one overview request, no per-member reads, and refreshes once',
     (tester) async {
       final requests = <RequestOptions>[];
       final client = Dio(
@@ -249,29 +242,34 @@ void main() {
       );
       client.httpClientAdapter = CallbackAdapter((request) {
         requests.add(request);
-        if (request.path.endsWith('/members')) {
-          return jsonResponse({
-            'success': true,
-            'data': [
-              for (var i = 0; i < 20; i++)
-                {...profileJson(firstName: 'Person $i'), 'id': idFor(100 + i)},
-            ],
-            'meta': {
-              'pagination': {'page': 1, 'limit': 20, 'total': 20},
-            },
-          });
-        }
-        if (request.path.endsWith('/memberships')) {
-          final id = request.path.split('/')[3];
+        if (request.path.endsWith('/member-overview')) {
           return jsonResponse({
             'success': true,
             'data': {
-              'member': {'id': id},
-              'currentMembership': null,
-              'subscriptions': [],
-            },
-            'meta': {
-              'pagination': {'page': 1, 'limit': 20, 'total': 0},
+              'calendar': {'timezone': 'Asia/Kolkata', 'today': '2026-01-11'},
+              'counts': {
+                'all': 20,
+                'active': 20,
+                'expiring': 0,
+                'dues': 0,
+                'expired': 0,
+                'none': 0,
+              },
+              'duesTotalPaise': 0,
+              'filter': 'all',
+              'data': [
+                for (var i = 0; i < 20; i++)
+                  {
+                    'member': {
+                      ...profileJson(firstName: 'Person $i'),
+                      'id': idFor(100 + i),
+                    },
+                    'membership': null,
+                    'balancePaise': 0,
+                    'dueSubscriptionId': null,
+                  },
+              ],
+              'pagination': {'page': 1, 'limit': 20, 'total': 20},
             },
           });
         }
@@ -286,6 +284,9 @@ void main() {
           credentialStorageProvider.overrideWithValue(FakeCredentialStorage()),
           memberRepositoryProvider.overrideWithValue(
             DioMemberRepository(client),
+          ),
+          memberOverviewRepositoryProvider.overrideWithValue(
+            DioMemberOverviewRepository(client),
           ),
         ],
       );
@@ -309,12 +310,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(requests.where((r) => r.path.endsWith('/members')).length, 1);
-      expect(requests.where((r) => r.path.endsWith('/memberships')).length, 20);
-      expect(requests.where((r) => r.path.endsWith('/summary')), isEmpty);
-      expect(requests.length, 21);
-      await tester.pump();
-      expect(requests.length, 21);
+      expect(requests.length, 1);
+      expect(requests.single.queryParameters['filter'], 'all');
+      expect(find.text('Person 0 River'), findsOneWidget);
       final indicator = tester.widget<RefreshIndicator>(
         find.byType(RefreshIndicator),
       );
@@ -322,99 +320,8 @@ void main() {
       final second = indicator.onRefresh();
       await tester.pumpAndSettle();
       await Future.wait([first, second]);
-      expect(requests.where((r) => r.path.endsWith('/members')).length, 2);
-      expect(requests.where((r) => r.path.endsWith('/memberships')).length, 40);
-      expect(requests.length, 42);
+      expect(requests.length, 2, reason: 'overlapping refreshes share one');
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-
-  for (final scenario in ['historical', 'expired', 'future', 'incomplete']) {
-    testWidgets(
-      'directory preserves $scenario debt semantics without a summary',
-      (tester) async {
-        final members = scenario == 'incomplete'
-            ? _FailingSecondPage()
-            : DueMembersFake();
-        members.debts[memberId] = switch (scenario) {
-          'historical' || 'incomplete' => [
-            debtJson(balance: 0),
-            for (var i = 0; i < 19; i++)
-              debtJson(id: idFor(500 + i), balance: 0, status: 'expired'),
-            debtJson(id: idFor(600), balance: 70000, status: 'expired'),
-          ],
-          'expired' => [debtJson(balance: 50000, status: 'expired')],
-          _ => [
-            debtJson(id: idFor(601), balance: 20000)..addAll({
-              'isCurrentlyActive': false,
-              'startDate': '2027-01-01',
-              'endDate': '2027-01-31',
-            }),
-            debtJson(balance: 0),
-            debtJson(id: idFor(602), balance: 70000, status: 'expired'),
-            debtJson(id: idFor(603), balance: 140000, status: 'cancelled'),
-          ],
-        };
-        final app = ProviderContainer(
-          overrides: [
-            appConfigProvider.overrideWithValue(AppConfig.fromValues()),
-            authApiServiceProvider.overrideWithValue(
-              FakeAuthApi()..identity = adminIdentity(),
-            ),
-            credentialStorageProvider.overrideWithValue(
-              FakeCredentialStorage(),
-            ),
-            memberRepositoryProvider.overrideWithValue(members),
-          ],
-        );
-        addTearDown(app.dispose);
-        await app
-            .read(sessionControllerProvider.notifier)
-            .login(
-              email: 'person@example.invalid',
-              password: syntheticCredential(),
-            );
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: app,
-            child: MaterialApp(
-              theme: AppTheme.light,
-              home: const Scaffold(body: MembersPageView()),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          members.operations.where((value) => value.startsWith('summary:')),
-          isEmpty,
-        );
-        expect(find.text('Fully Paid'), findsNothing);
-        if (scenario == 'incomplete') {
-          expect(find.text('Membership details unavailable'), findsOneWidget);
-          expect(find.textContaining('due'), findsNothing);
-        } else {
-          expect(
-            find.text(switch (scenario) {
-              'historical' => '₹700.00 due',
-              'expired' => '₹500.00 due',
-              _ => '₹900.00 due',
-            }),
-            findsOneWidget,
-          );
-          if (scenario == 'expired') {
-            expect(find.text('Expired'), findsOneWidget);
-          }
-          if (scenario == 'historical') {
-            expect(
-              members.operations
-                  .where((value) => value.startsWith('memberships:'))
-                  .length,
-              2,
-            );
-          }
-        }
-        await tester.pumpWidget(const SizedBox.shrink());
-      },
-    );
-  }
 }

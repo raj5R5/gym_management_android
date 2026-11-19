@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../members/providers/member_overview_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_config.dart';
@@ -128,6 +129,7 @@ class RenewalController extends AsyncNotifier<RenewalResult?> {
 
   void _refresh() {
     ref.invalidate(membersProvider);
+    ref.invalidate(memberOverviewProvider);
     ref.invalidate(memberSummaryProvider(request.scope));
     ref.invalidate(memberHistoryProvider);
     ref.invalidate(memberMembershipsProvider(request.scope));

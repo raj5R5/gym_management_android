@@ -1,3 +1,5 @@
+import '../../../shared/widgets/icon_label.dart';
+import '../../../shared/widgets/field_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -247,6 +249,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
               if (draft != null) ...[
                 ProfileSection(
                   title: 'Review purchase',
+                  icon: Icons.fact_check_outlined,
                   tone: AppTone.plan,
                   children: [
                     Text(_plan!.name),
@@ -254,14 +257,17 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                       '${_plan!.durationDays} days · ${formatInrPaise(_plan!.pricePaise)}',
                     ),
                     const Text(
-                      'The server sets the start date to today (UTC), resolves the end date and checks current plan terms and eligibility.',
+                      'The server sets the start date to today in the gym timezone, resolves the end date and checks current plan terms and eligibility.',
                     ),
                     if (draft.payment case final ManualPayment payment) ...[
                       Text(
                         'Payment to record: ${formatInrPaise(payment.amountPaise)} · ${payment.method.label}',
                       ),
                       if (payment.reference.isNotEmpty)
-                        Text('Reference: ${payment.reference}'),
+                        IconLabel(
+                          'Reference: ${payment.reference}',
+                          icon: Icons.receipt_long_outlined,
+                        ),
                       Text(
                         'Payment date: ${formatPaymentDateTime(MaterialLocalizations.of(context), payment.paidAt, timezone: timezone)}',
                       ),
@@ -310,6 +316,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                     children: [
                       ProfileSection(
                         title: 'Select an active plan',
+                        icon: Icons.card_membership_outlined,
                         tone: AppTone.plan,
                         children: [
                           if (plans.isLoading)
@@ -399,8 +406,9 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                         ],
                       ),
                       if (_plan != null) ...[
-                        Text(
+                        IconLabel(
                           'Plan price: ${formatInrPaise(_plan!.pricePaise)}',
+                          icon: Icons.sell_outlined,
                         ),
                         if (_plan!.pricePaise == 0)
                           const Text(
@@ -440,6 +448,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                             decimal: true,
                           ),
                           decoration: InputDecoration(
+                            prefixIcon: const FieldIcon('amount'),
                             labelText: 'Amount in INR',
                             prefixText: '₹ ',
                             helperText:
@@ -464,10 +473,12 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<PaymentMethod>(
+                          itemHeight: null,
                           key: const ValueKey('paymentMethod'),
                           initialValue: _method,
                           isExpanded: true,
                           decoration: const InputDecoration(
+                            prefixIcon: FieldIcon('method'),
                             labelText: 'Payment method',
                           ),
                           items: PaymentMethod.values
@@ -489,6 +500,7 @@ class _PurchasePageState extends ConsumerState<PurchasePage> {
                           enabled: !busy && !blocked && _positivePayment,
                           maxLength: 120,
                           decoration: InputDecoration(
+                            prefixIcon: const FieldIcon('reference'),
                             labelText:
                                 _positivePayment && _method.requiresReference
                                 ? 'Payment reference (required)'

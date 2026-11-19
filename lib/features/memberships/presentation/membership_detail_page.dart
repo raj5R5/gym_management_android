@@ -1,3 +1,7 @@
+import '../../../shared/widgets/icon_label.dart';
+import '../../receipts/receipt.dart';
+import '../../adjustments/adjustment_widgets.dart';
+import '../../receipts/upi_collect.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,6 +37,13 @@ class MembershipDetailPage extends ConsumerStatefulWidget {
 
 class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
   BillingResult? _result;
+  final _scroll = ScrollController();
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
   @override
   void didUpdateWidget(MembershipDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -73,6 +84,7 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
     return PopScope(
       canPop: !busy,
       child: ListView(
+        controller: _scroll,
         padding: const EdgeInsets.all(16),
         children: [
           Row(
@@ -118,19 +130,28 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
             )
           else if (detail.asData?.value case final MembershipDetail data) ...[
             ProfileSection(
-              title: data.subscription.planName,
+              title: 'Plan & balance',
+              icon: Icons.card_membership_outlined,
               children: [
                 membershipText(data.subscription),
-                Text(
+                IconLabel(
                   'Successful paid: ${formatInrPaise(data.payments.paidPaise)}',
+                  icon: Icons.payments_outlined,
                 ),
-                Text('Balance: ${formatInrPaise(data.payments.balancePaise)}'),
+                IconLabel(
+                  'Balance: ${formatInrPaise(data.payments.balancePaise)}',
+                  icon: Icons.account_balance_wallet_outlined,
+                ),
                 if (data.subscription.cancelledAt != null)
-                  Text(
+                  IconLabel(
                     'Cancelled: ${formatPaymentDateTime(MaterialLocalizations.of(context), data.subscription.cancelledAt!, timezone: timezone)}',
+                    icon: Icons.event_busy_outlined,
                   ),
                 if (data.subscription.cancellationReason != null)
-                  Text('Reason: ${data.subscription.cancellationReason}'),
+                  IconLabel(
+                    'Reason: ${data.subscription.cancellationReason}',
+                    icon: Icons.notes_outlined,
+                  ),
                 if (data.subscription.previousId != null)
                   const Text('Renewal of a previous membership.'),
               ],
@@ -159,17 +180,51 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
                 FilledButton.icon(
                   onPressed: busy || blocked
                       ? null
-                      : () => showRecordPayment(
-                          context,
-                          (
-                            member: scope,
-                            subscriptionId: widget.subscriptionId,
-                          ),
-                          member.asData?.value?.name,
-                          memberCode: member.asData?.value?.memberCode,
-                        ),
+                      : () async {
+                          final payment = await showRecordPayment(
+                            context,
+                            (
+                              member: scope,
+                              subscriptionId: widget.subscriptionId,
+                            ),
+                            member.asData?.value?.name,
+                            memberCode: member.asData?.value?.memberCode,
+                          );
+                          if (context.mounted) {
+                            offerReceipt(context, ref, payment);
+                          }
+                        },
                   icon: const Icon(Icons.add_card_outlined),
                   label: const Text('Record Payment'),
+                ),
+              if (data.payments.balancePaise > 0 && !savedPayment)
+                OutlinedButton.icon(
+                  onPressed: busy || blocked
+                      ? null
+                      : () async {
+                          final record = await showUpiCollect(
+                            context,
+                            amountPaise: data.payments.balancePaise,
+                            memberName: member.asData?.value?.name ?? 'Member',
+                            memberCode: member.asData?.value?.memberCode ?? '',
+                            planName: data.subscription.planName,
+                          );
+                          if (!record || !context.mounted) return;
+                          final payment = await showRecordPayment(
+                            context,
+                            (
+                              member: scope,
+                              subscriptionId: widget.subscriptionId,
+                            ),
+                            member.asData?.value?.name,
+                            memberCode: member.asData?.value?.memberCode,
+                          );
+                          if (context.mounted) {
+                            offerReceipt(context, ref, payment);
+                          }
+                        },
+                  icon: const Icon(Icons.qr_code_2),
+                  label: const Text('Collect by UPI'),
                 ),
               OutlinedButton(
                 onPressed: busy || blocked
@@ -187,6 +242,9 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
                           return;
                         }
                         setState(() => _result = result);
+                        if (_scroll.hasClients) {
+                          _scroll.jumpTo(0);
+                        }
                       },
                 child: const Text('Cancel membership'),
               ),
@@ -209,10 +267,19 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
                           return;
                         }
                         setState(() => _result = result);
+                        if (result != null && _scroll.hasClients) {
+                          _scroll.jumpTo(0);
+                        }
                       },
                 child: const Text('Review renewal'),
               ),
             ],
+            // Less frequent adjustments sit below the main payment actions.
+            if (data.subscription.status != 'cancelled')
+              MembershipAdjustmentsCard(
+                scope: scope,
+                subscriptionId: widget.subscriptionId,
+              ),
           ],
         ],
       ),

@@ -1,3 +1,6 @@
+import '../../../shared/widgets/icon_label.dart';
+import '../../../shared/widgets/field_icon.dart';
+import '../../../shared/widgets/titanium_surface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +20,7 @@ import '../providers/renewal_providers.dart';
 import 'billing_components.dart';
 import '../models/membership_eligibility.dart';
 import 'membership_eligibility_notice.dart';
+import '../../../shared/widgets/page_section.dart';
 
 Future<BillingResult?> showRenewalConfirmation(
   BuildContext context,
@@ -26,6 +30,8 @@ Future<BillingResult?> showRenewalConfirmation(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
+  backgroundColor: Colors.transparent,
+  showDragHandle: false,
   isDismissible: false,
   enableDrag: false,
   builder: (_) => RenewalConfirmationSheet(
@@ -239,7 +245,10 @@ class _RenewalConfirmationSheetState
           'The original plan, amount, payment timestamp and request key are preserved. Do not collect money again or start another renewal.',
         ),
         if (saved != null) ...[
-          Text('Plan price: ${formatInrPaise(saved.request.pricePaise)}'),
+          IconLabel(
+            'Plan price: ${formatInrPaise(saved.request.pricePaise)}',
+            icon: Icons.sell_outlined,
+          ),
           Text(
             'Payment to verify: ${formatInrPaise(saved.request.receivedPaise)}',
           ),
@@ -332,12 +341,12 @@ class _RenewalConfirmationSheetState
               'No active membership plans. Configure an active plan in Membership Plans before renewing.',
             )
           else
-            for (final plan in plans.asData!.value!.items)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                child: SoftPanel(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  child: ListTile(
+            SeparatedRows(
+              indent: 40,
+              children: [
+                for (final plan in plans.asData!.value!.items)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
                     selected: _selected?.id == plan.id,
                     leading: Icon(
                       _selected?.id == plan.id
@@ -350,8 +359,8 @@ class _RenewalConfirmationSheetState
                       '${plan.durationDays} days · ${formatInrPaise(plan.pricePaise)}',
                     ),
                   ),
-                ),
-              ),
+              ],
+            ),
           if (plans.asData?.value case final data?)
             PageControls(
               page: data.pagination.page,
@@ -378,15 +387,22 @@ class _RenewalConfirmationSheetState
           ),
         ] else if (_step == 1) ...[
           Text(_selected!.name, style: Theme.of(context).textTheme.titleLarge),
-          Text('Plan price: ${formatInrPaise(_selected!.pricePaise)}'),
+          IconLabel(
+            'Plan price: ${formatInrPaise(_selected!.pricePaise)}',
+            icon: Icons.sell_outlined,
+          ),
           if (_selected!.pricePaise == 0)
             const Text('Free plan · ₹0.00. No payment is required.')
           else ...[
             DropdownButtonFormField<RenewalPaymentChoice>(
+              itemHeight: null,
               isExpanded: true,
               initialValue: _choice,
               key: ValueKey(_choice),
-              decoration: const InputDecoration(labelText: 'Payment choice'),
+              decoration: const InputDecoration(
+                prefixIcon: FieldIcon('method'),
+                labelText: 'Payment choice',
+              ),
               items: const [
                 DropdownMenuItem(
                   value: RenewalPaymentChoice.full,
@@ -418,6 +434,7 @@ class _RenewalConfirmationSheetState
                   decimal: true,
                 ),
                 decoration: const InputDecoration(
+                  prefixIcon: FieldIcon('amount'),
                   labelText: 'Amount collected (INR)',
                 ),
                 validator: (_) {
@@ -431,9 +448,13 @@ class _RenewalConfirmationSheetState
               ),
             if (_choice != RenewalPaymentChoice.later) ...[
               DropdownButtonFormField<PaymentMethod>(
+                itemHeight: null,
                 isExpanded: true,
                 initialValue: _method,
-                decoration: const InputDecoration(labelText: 'Payment method'),
+                decoration: const InputDecoration(
+                  prefixIcon: FieldIcon('method'),
+                  labelText: 'Payment method',
+                ),
                 items: [
                   for (final method in PaymentMethod.values)
                     DropdownMenuItem(value: method, child: Text(method.label)),
@@ -444,6 +465,7 @@ class _RenewalConfirmationSheetState
                 key: const ValueKey('renewalReference'),
                 controller: _reference,
                 decoration: InputDecoration(
+                  prefixIcon: const FieldIcon('reference'),
                   labelText: _method.requiresReference
                       ? 'Reference (required)'
                       : 'Reference (optional)',
@@ -502,7 +524,10 @@ class _RenewalConfirmationSheetState
                     quote.memberName,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  Text('Member code: ${quote.memberCode}'),
+                  IconLabel(
+                    'Member code: ${quote.memberCode}',
+                    icon: Icons.badge_outlined,
+                  ),
                   Text(quote.planName),
                   Text('Current plan duration: ${quote.durationDays} days'),
                   Text('Renewal price: ${formatInrPaise(quote.pricePaise)}'),
@@ -516,7 +541,7 @@ class _RenewalConfirmationSheetState
                     'Renewal ends: ${dates.formatMediumDate(quote.endDate.value)}',
                   ),
                   const Text(
-                    'End dates are exclusive. Membership calendar dates use UTC.',
+                    'End dates are exclusive. Membership calendar dates follow the gym timezone.',
                   ),
                 ],
               ),
@@ -603,25 +628,28 @@ class _RenewalConfirmationSheetState
       if (confirmed == null)
         TextButton(
           onPressed: busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: const Text('Not now'),
         ),
     ];
     return PopScope(
       canPop: !busy,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          AppSpacing.xl,
-          AppSpacing.lg,
-          MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
-        ),
-        child: SingleChildScrollView(
-          child: Form(
-            key: _form,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
+      child: TitaniumGlass(
+        opacity: .96,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.xl,
+            AppSpacing.lg,
+            MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
+          ),
+          child: SingleChildScrollView(
+            child: Form(
+              key: _form,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
             ),
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'member_overview_providers.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../../auth/models/session_state.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -271,6 +272,7 @@ class MemberMutationController extends AsyncNotifier<MemberProfile?> {
       if (!_current()) return null;
       state = AsyncData(saved);
       ref.invalidate(membersProvider);
+      ref.invalidate(memberOverviewProvider);
       ref.invalidate(dashboardProvider);
       if (scope.memberId.isNotEmpty) {
         ref.invalidate(memberProfileProvider(scope));

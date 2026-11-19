@@ -76,7 +76,10 @@ void main() {
       scope.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: scope, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: scope,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
     scope.read(appRouterProvider).go('${AppRoutes.members}/new?gymId=$gymA');
@@ -97,18 +100,40 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // Date of birth is chosen with the date picker in typed-input mode.
+  Future<void> pickBirthDate(WidgetTester tester, String typed) async {
+    final field = find.byKey(const ValueKey('dateOfBirth'));
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(tester.element(field), alignment: .5);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Switch to input'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(DatePickerDialog),
+        matching: find.byType(TextField),
+      ),
+      typed,
+    );
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+  }
+
   Future<void> fill(WidgetTester tester) async {
     for (final entry in {
       'memberCode': ' me_01 ',
       'firstName': 'Alex',
       'lastName': 'River',
       'phone': '9876543210',
-      'dateOfBirth': '2000-01-02',
     }.entries) {
       final finder = find.byKey(ValueKey(entry.key));
       await reveal(tester, finder);
       await tester.enterText(finder, entry.value);
     }
+    await pickBirthDate(tester, '01/02/2000');
   }
 
   String title(WidgetTester tester) =>
@@ -392,7 +417,7 @@ void main() {
       expect(value(tester, 'firstName'), 'Alex');
       expect(value(tester, 'lastName'), 'River');
       expect(value(tester, 'phone'), '9876543210');
-      expect(value(tester, 'dateOfBirth'), '2000-01-02');
+      expect(value(tester, 'dateOfBirth'), 'Jan 2, 2000');
       expect(find.text('female'), findsOneWidget);
     },
   );
@@ -408,17 +433,21 @@ void main() {
     expect(find.text('Enter a phone number with 7–15 digits.'), findsOneWidget);
     expect(result.members.writes, isEmpty);
   });
-  testWidgets('invalid optional birth date cannot advance', (tester) async {
+  // Impossible dates cannot be picked; format validation is covered in
+  // birth_date_field_test.dart. Under-18 dates must still block the wizard.
+  testWidgets('under-18 birth date cannot advance', (tester) async {
     await pumpWizard(tester);
     await fill(tester);
-    await reveal(tester, find.byKey(const ValueKey('dateOfBirth')));
-    await tester.enterText(
-      find.byKey(const ValueKey('dateOfBirth')),
-      '2000-02-30',
-    );
+    final year = DateTime.now().year - 10;
+    await pickBirthDate(tester, '01/01/$year');
     await tap(tester, 'Continue');
     expect(title(tester), 'Member Details');
-    expect(find.text('Enter a valid date as YYYY-MM-DD.'), findsOneWidget);
+    expect(
+      find.text(
+        'Under-18 registration is unavailable until guardian authorization and verification are supported.',
+      ),
+      findsOneWidget,
+    );
   });
   testWidgets(
     'member-only choice skips Payment and is retained when going back',
@@ -1045,7 +1074,7 @@ void main() {
       await tap(tester, 'Edit member details');
       expect(title(tester), 'Member Details');
       expect(value(tester, 'memberCode'), ' me_01 ');
-      expect(value(tester, 'dateOfBirth'), '2000-01-02');
+      expect(value(tester, 'dateOfBirth'), 'Jan 2, 2000');
       await reveal(tester, find.byKey(const ValueKey('firstName')));
       await tester.enterText(
         find.byKey(const ValueKey('firstName')),

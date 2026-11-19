@@ -98,9 +98,7 @@ class OnboardingPayment {
 class OnboardingMembership {
   OnboardingMembership({required this.planId, this.startDate, this.payment}) {
     onboardingId(planId);
-    if (startDate != null && startDate!.value.isAfter(DateTime.now().toUtc())) {
-      throw const FormatException('Future membership starts are unsupported.');
-    }
+    // The server validates future starts in the authorized gym calendar.
   }
   final String planId;
   final CalendarDate? startDate;
@@ -118,13 +116,9 @@ class OnboardingRequest {
   factory OnboardingRequest({
     required MemberDraft member,
     OnboardingMembership? membership,
-    String? branchId,
   }) => OnboardingRequest.fromFrozenJson(
     jsonEncode({
-      'member': {
-        ...member.toJson(editing: false),
-        if (branchId != null) 'branchId': onboardingId(branchId),
-      },
+      'member': {...member.toJson(editing: false)},
       if (membership != null) 'membership': membership.toJson(),
     }),
   );

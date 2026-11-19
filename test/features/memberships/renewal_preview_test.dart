@@ -3,6 +3,15 @@ import 'package:gym_management_app/features/memberships/models/renewal_preview.d
 import 'billing_fakes.dart';
 
 void main() {
+  test(
+    'preview accepts configured IANA gym timezone without changing terms',
+    () {
+      final json = renewalPreviewJson()..['calendarTimezone'] = 'Asia/Kolkata';
+      final preview = RenewalPreview.fromJson(json);
+      expect(preview.calendarTimezone, 'Asia/Kolkata');
+      expect(preview.toRequest()['expectedTerms'], json['terms']);
+    },
+  );
   test('preview uses current server terms and exact calendar dates', () {
     final preview = RenewalPreview.fromJson(renewalPreviewJson());
     expect(preview.memberName, 'Ada Lovelace');

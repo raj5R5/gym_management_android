@@ -1,3 +1,7 @@
+import '../../../shared/widgets/membership_date_range.dart';
+import '../../receipts/receipt.dart';
+import '../../members/presentation/member_list_widgets.dart';
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +15,7 @@ import '../providers/membership_providers.dart';
 import '../providers/payment_providers.dart';
 import 'billing_components.dart';
 import 'payment_transaction_details.dart';
+import '../../../shared/widgets/card_reveal.dart';
 
 class MembershipPage extends ConsumerStatefulWidget {
   const MembershipPage({
@@ -133,6 +138,7 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
           ],
           ProfileSection(
             title: 'Current membership',
+            icon: Icons.card_membership_outlined,
             children: [
               if (history.isLoading)
                 const Center(child: CircularProgressIndicator())
@@ -149,10 +155,14 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                   membershipText(data.current!),
                   if (data.current!.payments
                       case final MembershipPayments amounts) ...[
-                    Text(
+                    IconLabel(
                       'Successful paid: ${formatInrPaise(amounts.paidPaise)}',
+                      icon: Icons.payments_outlined,
                     ),
-                    Text('Balance: ${formatInrPaise(amounts.balancePaise)}'),
+                    IconLabel(
+                      'Balance: ${formatInrPaise(amounts.balancePaise)}',
+                      icon: Icons.account_balance_wallet_outlined,
+                    ),
                   ],
                   TextButton(
                     onPressed: () => context.push(
@@ -165,6 +175,7 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
           ),
           ProfileSection(
             title: 'Membership history',
+            icon: Icons.history,
             children: [
               if (history.isLoading)
                 const Center(child: CircularProgressIndicator())
@@ -179,15 +190,30 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                 if (data.subscriptions.isEmpty)
                   const Text('No membership history.'),
                 ...data.subscriptions.map(
-                  (subscription) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(subscription.planName),
-                    subtitle: Text(
-                      '${subscription.status} · ${subscription.currentlyActive ? 'current' : 'not current'}\n${subscription.startDate} → ${subscription.endDate} (end exclusive, UTC)\n${formatInrPaise(subscription.pricePaise)}',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push(
-                      membershipPath(scope, subscriptionId: subscription.id),
+                  (subscription) => Builder(
+                    builder: (tileContext) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(subscription.planName),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          MembershipStatusPill(membership: subscription),
+                          const SizedBox(height: 8),
+                          MembershipDateRange(
+                            start: subscription.startDate.value,
+                            end: subscription.endDate.value,
+                          ),
+                          Text(
+                            '${formatInrPaise(subscription.pricePaise)} · End exclusive, gym timezone',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => pushFromCard(
+                        tileContext,
+                        membershipPath(scope, subscriptionId: subscription.id),
+                      ),
                     ),
                   ),
                 ),
@@ -229,14 +255,25 @@ class _MembershipPageState extends ConsumerState<MembershipPage> {
                           payment: payment,
                           timezone: timezone,
                         ),
-                        TextButton(
-                          onPressed: () => context.push(
-                            membershipPath(
-                              scope,
-                              subscriptionId: payment.subscriptionId,
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: () => context.push(
+                                membershipPath(
+                                  scope,
+                                  subscriptionId: payment.subscriptionId,
+                                ),
+                              ),
+                              child: const Text('View associated membership'),
                             ),
-                          ),
-                          child: const Text('View associated membership'),
+                            TextButton.icon(
+                              onPressed: () =>
+                                  shareReceipt(context, ref, payment.id),
+                              icon: const Icon(Icons.picture_as_pdf_outlined),
+                              label: const Text('Share receipt'),
+                            ),
+                          ],
                         ),
                       ],
                     ),

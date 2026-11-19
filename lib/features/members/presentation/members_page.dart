@@ -4,13 +4,12 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
-import '../data/member_failure.dart';
-import '../models/member_models.dart';
-import '../providers/member_providers.dart';
+import '../../owner_profile/owner_profile.dart';
+import '../models/member_overview.dart';
+import '../providers/member_overview_providers.dart';
 import 'member_components.dart';
 import 'member_list_widgets.dart';
-import '../../memberships/data/outstanding_dues_repository.dart';
-import '../../memberships/models/membership_eligibility.dart';
+import 'member_overview_widgets.dart';
 
 class MembersPageView extends ConsumerWidget {
   const MembersPageView({super.key});
@@ -32,10 +31,14 @@ class _MembersList extends ConsumerStatefulWidget {
 
 class _MembersListState extends ConsumerState<_MembersList> {
   late final TextEditingController _search;
+  MemberOverviewPage? _last;
+
   @override
   void initState() {
     super.initState();
-    _search = TextEditingController(text: ref.read(memberQueryProvider).search);
+    _search = TextEditingController(
+      text: ref.read(memberOverviewQueryProvider).search,
+    );
   }
 
   @override
@@ -45,116 +48,42 @@ class _MembersListState extends ConsumerState<_MembersList> {
   }
 
   Future<void>? _refreshFlight;
+
+  /// Single-flight: overlapping pull-to-refresh gestures share one reload.
   Future<void> _refresh() {
     final pending = _refreshFlight;
     if (pending != null) return pending;
     late final Future<void> flight;
-    flight = _reloadDirectory().whenComplete(() {
+    flight = _reload().whenComplete(() {
       if (identical(_refreshFlight, flight)) _refreshFlight = null;
     });
     return _refreshFlight = flight;
   }
 
-  Future<void> _reloadDirectory() async {
+  Future<void> _reload() async {
+    final query = ref.read(memberOverviewQueryProvider);
+    ref.invalidate(memberOverviewProvider);
     try {
-      await ref.read(membersProvider.notifier).reload();
-      if (!mounted || ref.read(adminGymProvider) != widget.gym) return;
-      for (final member
-          in ref.read(membersProvider).asData?.value?.members ??
-              <MemberProfile>[]) {
-        final scope = scopeFor(widget.gym, member.id);
-        ref.invalidate(memberMembershipsProvider(scope));
-      }
-    } on MemberFailure {
-      /* AsyncValue renders the safe failure. */
+      await ref.read(memberOverviewProvider(query).future);
+    } catch (_) {
+      // The error is rendered with a retry action.
     }
   }
 
-  void _apply(String? gender) => ref
-      .read(memberQueryProvider.notifier)
-      .apply(search: _search.text, gender: gender);
+  void _applySearch() =>
+      ref.read(memberOverviewQueryProvider.notifier).search(_search.text);
   void _addMember() =>
       context.push('${AppRoutes.members}/new?gymId=${widget.gym.gymId}');
 
-  Widget _header() => Row(
-    children: [
-      Expanded(
-        child: Text(
-          'Members',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-      ),
-      const SizedBox(width: AppSpacing.md),
-      IconButton.filled(
-        tooltip: 'Add member',
-        style: IconButton.styleFrom(
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          minimumSize: const Size(48, 48),
-        ),
-        onPressed: _addMember,
-        icon: const Icon(Icons.person_add_outlined),
-      ),
-    ],
-  );
-
-  Widget _filters(MemberListQuery query) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: TextField(
-          controller: _search,
-          maxLength: 100,
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            labelText: 'Search members',
-            hintText: 'Code, name or phone',
-            counterText: '',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: IconButton(
-              tooltip: 'Search',
-              onPressed: () => _apply(query.gender),
-              icon: const Icon(Icons.arrow_forward),
-            ),
-          ),
-          onSubmitted: (_) => _apply(query.gender),
-          onChanged: (value) {
-            if (value.isEmpty && query.search.isNotEmpty) _apply(query.gender);
-          },
-        ),
-      ),
-      const SizedBox(width: AppSpacing.sm),
-      PopupMenuButton<String>(
-        tooltip: 'Filter by gender',
-        initialValue: query.gender ?? '',
-        onSelected: (value) => _apply(value.isEmpty ? null : value),
-        icon: Badge(
-          isLabelVisible: query.gender != null,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          child: const Icon(Icons.filter_list),
-        ),
-        itemBuilder: (_) => [
-          for (final option in [
-            ('', 'All'),
-            ('male', 'Male'),
-            ('female', 'Female'),
-          ])
-            CheckedPopupMenuItem(
-              value: option.$1,
-              checked: (query.gender ?? '') == option.$1,
-              child: Text(option.$2),
-            ),
-        ],
-      ),
-    ],
-  );
-
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(membersProvider);
-    final query = ref.watch(memberQueryProvider);
-    final result = state.asData?.value;
-    final filtered = query.search.isNotEmpty || query.gender != null;
+    final query = ref.watch(memberOverviewQueryProvider);
+    final state = ref.watch(memberOverviewProvider(query));
+    if (state.asData?.value case final page?) _last = page;
+    final page = state.asData?.value;
+    final counts = (page ?? _last)?.counts;
+    final gymName = currentOwnerProfile(ref)?.gymName ?? '';
+    final searching = query.search.isNotEmpty;
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: AppSurfaces.of(context).canvasGradient,
@@ -176,16 +105,74 @@ class _MembersListState extends ConsumerState<_MembersList> {
                 AppSpacing.xl,
               ),
               children: [
-                _header(),
-                const SizedBox(height: AppSpacing.xl),
-                _filters(query),
-                const SizedBox(height: AppSpacing.xl),
-                if (state.isLoading)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Members',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
+                    // Narrow screens or large text keep an icon-only button.
+                    if (constraints.maxWidth < 360 ||
+                        MediaQuery.textScalerOf(context).scale(16) > 20)
+                      IconButton.filled(
+                        tooltip: 'Add member',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                        ),
+                        onPressed: _addMember,
+                        icon: const Icon(Icons.person_add_outlined),
+                      )
+                    else
+                      FilledButton.icon(
+                        onPressed: _addMember,
+                        icon: const Icon(Icons.person_add_outlined),
+                        label: const Text('Add member'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                TextField(
+                  controller: _search,
+                  maxLength: 100,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    labelText: 'Search members',
+                    hintText: 'Name, phone or member code',
+                    counterText: '',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: searching
+                        ? IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _search.clear();
+                              _applySearch();
+                            },
+                            icon: const Icon(Icons.close),
+                          )
+                        : null,
+                  ),
+                  onSubmitted: (_) => _applySearch(),
+                  onChanged: (value) {
+                    if (value.isEmpty && searching) _applySearch();
+                  },
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                OverviewFilterChips(
+                  selected: query.filter,
+                  counts: counts,
+                  onSelected: (filter) => ref
+                      .read(memberOverviewQueryProvider.notifier)
+                      .select(filter),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (state.isLoading && page == null)
                   const MembersFeedbackPanel(
                     loading: true,
                     title: 'Loading members',
                     child: Text(
-                      'Getting your member directory ready.',
+                      'Getting your member list ready.',
                       textAlign: TextAlign.center,
                     ),
                   )
@@ -195,69 +182,50 @@ class _MembersListState extends ConsumerState<_MembersList> {
                     title: 'Unable to load members',
                     child: MemberError(error: state.error, retry: _refresh),
                   )
-                else if (result != null) ...[
-                  if (result.members.isEmpty)
-                    MembersFeedbackPanel(
-                      icon: filtered ? Icons.search_off : Icons.people_outline,
-                      title: filtered || query.page > 1
-                          ? 'No matching members'
-                          : 'Your community starts here',
-                      child: Column(
-                        children: [
-                          Text(
-                            !filtered && query.page == 1
-                                ? 'No members yet. Add your first member.'
-                                : 'No members match this page or filter.',
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          if (!filtered && query.page == 1)
-                            FilledButton(
-                              onPressed: _addMember,
-                              child: const Text('Create your first member'),
-                            )
-                          else
-                            OutlinedButton(
-                              onPressed: () {
-                                _search.clear();
-                                _apply(null);
-                              },
-                              child: Text(
-                                filtered
-                                    ? 'Clear filters'
-                                    : 'Return to first page',
-                              ),
-                            ),
-                        ],
-                      ),
+                else if (page != null) ...[
+                  if (page.rows.isEmpty)
+                    _EmptyMembers(
+                      query: query,
+                      totalMembers: page.counts[MemberOverviewFilter.all],
+                      addMember: _addMember,
+                      showAll: () {
+                        _search.clear();
+                        ref
+                            .read(memberOverviewQueryProvider.notifier)
+                            .select(MemberOverviewFilter.all);
+                        _applySearch();
+                      },
                     )
                   else ...[
                     Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                       child: Text(
-                        '${result.pagination.total} ${filtered ? 'matching members' : 'members'}',
+                        _summary(query, page),
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
-                    ResponsiveMemberGrid(
-                      children: [
-                        for (final member in result.members)
-                          _DirectoryCard(gym: widget.gym, member: member),
-                      ],
-                    ),
+                    for (final row in page.rows) ...[
+                      MemberOverviewTile(
+                        row: row,
+                        gym: widget.gym,
+                        gymName: gymName,
+                        showVisits:
+                            query.filter == MemberOverviewFilter.inactive,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
                   ],
-                  const SizedBox(height: AppSpacing.sm),
                   PageControls(
-                    page: result.pagination.page,
-                    total: result.pagination.total,
-                    previous: result.pagination.hasPrevious
+                    page: page.pagination.page,
+                    total: page.pagination.total,
+                    previous: page.pagination.hasPrevious
                         ? () => ref
-                              .read(memberQueryProvider.notifier)
+                              .read(memberOverviewQueryProvider.notifier)
                               .page(query.page - 1)
                         : null,
-                    next: result.pagination.hasNext
+                    next: page.pagination.hasNext
                         ? () => ref
-                              .read(memberQueryProvider.notifier)
+                              .read(memberOverviewQueryProvider.notifier)
                               .page(query.page + 1)
                         : null,
                   ),
@@ -269,45 +237,75 @@ class _MembersListState extends ConsumerState<_MembersList> {
       ),
     );
   }
+
+  String _summary(MemberOverviewQuery query, MemberOverviewPage page) {
+    final total = page.pagination.total;
+    final noun = total == 1 ? 'member' : 'members';
+    return switch (query.filter) {
+      MemberOverviewFilter.all => '$total $noun',
+      MemberOverviewFilter.active => '$total with an active membership',
+      MemberOverviewFilter.expiring => '$total expiring in the next 7 days',
+      MemberOverviewFilter.dues => '$total $noun owe money',
+      MemberOverviewFilter.expired => '$total expired, not renewed',
+      MemberOverviewFilter.none => '$total without a membership',
+      MemberOverviewFilter.inactive => '$total not visited in 10+ days',
+    };
+  }
 }
 
-class _DirectoryCard extends ConsumerWidget {
-  const _DirectoryCard({required this.gym, required this.member});
-  final AdminGymContext gym;
-  final MemberProfile member;
+class _EmptyMembers extends StatelessWidget {
+  const _EmptyMembers({
+    required this.query,
+    required this.totalMembers,
+    required this.addMember,
+    required this.showAll,
+  });
+  final MemberOverviewQuery query;
+  final int totalMembers;
+  final VoidCallback addMember, showAll;
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scope = scopeFor(gym, member.id);
-    final memberships = ref.watch(memberMembershipsProvider(scope));
-    AsyncValue<int?> dues;
-    if (memberships.isLoading) {
-      dues = const AsyncLoading();
-    } else if (memberships.hasError) {
-      dues = AsyncError(
-        memberships.error!,
-        memberships.stackTrace ?? StackTrace.current,
+  Widget build(BuildContext context) {
+    if (totalMembers == 0) {
+      return MembersFeedbackPanel(
+        icon: Icons.people_outline,
+        title: 'Add your first member',
+        child: Column(
+          children: [
+            const Text(
+              'Members you add appear here with their plan, days left and dues.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton(onPressed: addMember, child: const Text('Add member')),
+          ],
+        ),
       );
-    } else if (memberships.asData?.value case final records?) {
-      try {
-        dues = AsyncData(
-          OutstandingDues([
-            OutstandingMember(member, verifiedUnpaidMemberships(records)),
-          ]).totalPaise,
-        );
-      } catch (error, stack) {
-        dues = AsyncError(error, stack);
-      }
-    } else {
-      dues = const AsyncData(null);
     }
-    return MemberDirectoryCard(
-      member: member,
-      memberships: memberships,
-      outstandingDues: dues,
-      retry: () {
-        ref.invalidate(memberMembershipsProvider(scope));
-      },
-      onTap: () => context.push(memberPath(scope)),
+    final message = query.search.isNotEmpty
+        ? 'No members match “${query.search}”.'
+        : switch (query.filter) {
+            MemberOverviewFilter.expiring =>
+              'No memberships end in the next 7 days.',
+            MemberOverviewFilter.dues => 'Nobody owes money right now.',
+            MemberOverviewFilter.expired => 'No expired memberships to renew.',
+            MemberOverviewFilter.none => 'Every member has a membership.',
+            MemberOverviewFilter.inactive =>
+              'Every active member visited in the last 10 days.',
+            _ => 'No members to show.',
+          };
+    return MembersFeedbackPanel(
+      icon: Icons.check_circle_outline,
+      title: 'All clear',
+      child: Column(
+        children: [
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: AppSpacing.lg),
+          OutlinedButton(
+            onPressed: showAll,
+            child: const Text('Show all members'),
+          ),
+        ],
+      ),
     );
   }
 }

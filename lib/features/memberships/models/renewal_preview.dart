@@ -1,5 +1,7 @@
 import '../../members/models/member_models.dart';
 import 'billing_models.dart';
+import 'package:timezone/data/latest_all.dart' as database;
+import 'package:timezone/timezone.dart' as tz;
 import '../../admin_dashboard/models/dashboard_models.dart';
 
 /// Dates and commercial terms are supplied by the subscription service.
@@ -27,7 +29,8 @@ class RenewalPreview {
         throw const FormatException('Invalid renewal identity.');
       }
     }
-    if (calendarTimezone != 'UTC' ||
+    database.initializeTimeZones();
+    if (!tz.timeZoneDatabase.locations.containsKey(calendarTimezone) ||
         durationDays < 1 ||
         durationDays > 3650 ||
         pricePaise > maximumPaymentPaise ||

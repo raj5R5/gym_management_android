@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../receipts/receipt.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
@@ -11,6 +12,7 @@ import '../../memberships/presentation/record_payment_sheet.dart';
 import '../../memberships/providers/payment_providers.dart';
 import '../models/member_models.dart';
 import '../providers/member_providers.dart';
+import 'member_list_widgets.dart' show membershipStatusLabel;
 
 class MemberPayNow extends ConsumerStatefulWidget {
   const MemberPayNow({
@@ -51,12 +53,13 @@ class _MemberPayNowState extends ConsumerState<MemberPayNow> {
         state.asData!.value!,
       ).where((membership) => membership.id == id).firstOrNull;
       if (selected == null) return;
-      await showRecordPayment(
+      final payment = await showRecordPayment(
         context,
         (member: widget.scope, subscriptionId: selected.id),
         widget.member.name,
         memberCode: widget.member.memberCode,
       );
+      if (mounted) offerReceipt(context, ref, payment);
     } on BillingFailure catch (error) {
       if (mounted && _current) {
         ScaffoldMessenger.of(
@@ -108,35 +111,18 @@ class _MemberPayNowState extends ConsumerState<MemberPayNow> {
       }
     }
     if (collectible.isEmpty) return const SizedBox.shrink();
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: Align(
-          alignment: Alignment.centerRight,
-          heightFactor: 1,
-          child: FloatingActionButton.extended(
-            heroTag: 'member-pay-now',
-            onPressed: _opening ? null : () => _open(collectible),
-            backgroundColor: _opening
-                ? Theme.of(context).colorScheme.surfaceContainerHigh
-                : null,
-            foregroundColor: _opening
-                ? Theme.of(context).colorScheme.onSurfaceVariant
-                : null,
-            icon: Icon(
-              _opening ? Icons.hourglass_top_outlined : Icons.add_card_outlined,
-            ),
-            label: Text(_opening ? 'Opening payment…' : 'Pay Now'),
-          ),
-        ),
+    return FilledButton.icon(
+      onPressed: _opening ? null : () => _open(collectible),
+      icon: Icon(
+        _opening ? Icons.hourglass_top_outlined : Icons.add_card_outlined,
       ),
+      label: Text(_opening ? 'Opening payment…' : 'Pay Now'),
     );
   }
 }
 
 /// Secondary recovery entry points preserve exact retries and acknowledgement;
-/// they never offer a second primary collection action beside the floating CTA.
+/// they never offer a second primary collection action beside Pay Now.
 class MemberPaymentRecovery extends ConsumerWidget {
   const MemberPaymentRecovery({
     super.key,
@@ -229,29 +215,20 @@ class _ChooseUnpaidMembership extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(memberMembershipsProvider(scope));
-    final List<Membership> due;
-    if (!matchesScope(ref.watch(adminGymProvider), scope) ||
-        state.isLoading ||
-        state.hasError ||
-        state.asData?.value == null) {
-      return const Padding(
-        padding: EdgeInsets.all(AppSpacing.lg),
-        child: Text(
-          'Membership balances are unavailable. Close this sheet and refresh the member.',
-        ),
-      );
+    final current = matchesScope(ref.watch(adminGymProvider), scope);
+    final records = state.asData?.value;
+    List<Membership> due = const [];
+    BillingFailure? balanceFailure;
+    if (current && !state.isLoading && !state.hasError && records != null) {
+      try {
+        due = verifiedUnpaidMemberships(records);
+      } on BillingFailure catch (error) {
+        balanceFailure = error;
+      }
     }
-    try {
-      due = verifiedUnpaidMemberships(state.asData!.value!);
-    } on BillingFailure {
-      return const Padding(
-        padding: EdgeInsets.all(AppSpacing.lg),
-        child: Text(
-          'Membership balances could not be verified. Close this sheet and refresh the member.',
-        ),
-      );
-    }
-    return SingleChildScrollView(
+    void retry() => ref.invalidate(memberMembershipsProvider(scope));
+
+    return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -272,28 +249,71 @@ class _ChooseUnpaidMembership extends ConsumerWidget {
               ),
             ],
           ),
-          const Text('Payments apply only to the membership you select.'),
-          for (final membership in due)
-            Card(
-              child: ListTile(
-                key: ValueKey('pay-membership-${membership.id}'),
-                onTap: () => Navigator.pop(context, membership.id),
-                title: Text(membership.planName),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    MembershipDateRange(
-                      start: membership.startDate.value,
-                      end: membership.endDate.value,
+          const SizedBox(height: AppSpacing.sm),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!current)
+                    const Text(
+                      'Membership balances are unavailable. The account or gym changed. Close this sheet and reopen the correct member.',
+                    )
+                  else if (state.isLoading) ...[
+                    const LinearProgressIndicator(
+                      semanticsLabel: 'Loading outstanding memberships',
                     ),
-                    Text(
-                      '${membership.status == 'expired' ? 'Expired · ' : ''}${formatInrPaise(membership.payments!.balancePaise)} remaining',
+                    const SizedBox(height: AppSpacing.sm),
+                    Semantics(
+                      liveRegion: true,
+                      child: const Text('Checking outstanding memberships…'),
                     ),
+                  ] else if (state.hasError)
+                    BillingError(error: state.error, retry: retry)
+                  else if (records == null || balanceFailure != null)
+                    BillingError(
+                      error:
+                          balanceFailure ??
+                          const BillingFailure(
+                            'Membership balances are unavailable. Retry to verify them.',
+                          ),
+                      retry: retry,
+                    )
+                  else if (due.isEmpty)
+                    Semantics(
+                      liveRegion: true,
+                      child: const Text('No outstanding memberships remain.'),
+                    )
+                  else ...[
+                    const Text(
+                      'Payments apply only to the membership you select.',
+                    ),
+                    for (final membership in due)
+                      Card(
+                        child: ListTile(
+                          key: ValueKey('pay-membership-${membership.id}'),
+                          onTap: () => Navigator.pop(context, membership.id),
+                          title: Text(membership.planName),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              MembershipDateRange(
+                                start: membership.startDate.value,
+                                end: membership.endDate.value,
+                              ),
+                              Text(
+                                '${membershipStatusLabel(membership)} · ${formatInrPaise(membership.payments!.balancePaise)} remaining',
+                              ),
+                            ],
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                        ),
+                      ),
                   ],
-                ),
-                trailing: const Icon(Icons.chevron_right),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );

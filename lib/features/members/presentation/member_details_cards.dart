@@ -4,9 +4,9 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
 import '../../../shared/formatting/payment_date.dart';
 import '../../../shared/widgets/membership_date_range.dart';
-import '../../../shared/widgets/profile_section.dart';
 import '../../../shared/widgets/soft_panel.dart';
 import '../../memberships/models/billing_models.dart';
+import '../../memberships/presentation/plan_duration_summary.dart';
 import '../models/member_models.dart';
 import '../providers/member_providers.dart';
 import 'member_components.dart';
@@ -31,7 +31,8 @@ class MemberProfileCard extends StatelessWidget {
           header: true,
           child: Text(
             member.name,
-            style: theme.textTheme.headlineSmall?.copyWith(
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontSize: 24,
               fontWeight: FontWeight.w700,
               letterSpacing: -.5,
             ),
@@ -44,8 +45,21 @@ class MemberProfileCard extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         Semantics(
-          label: 'Member status',
-          child: MemberStatusBadge(status: member.status),
+          label: 'Member profile status',
+          child: Wrap(
+            spacing: AppSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('Profile', style: theme.textTheme.bodySmall),
+              MemberStatusBadge(status: member.status),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton.icon(
+          onPressed: () => context.push(memberPath(scope, edit: true)),
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          label: const Text('Edit member'),
         ),
       ],
     );
@@ -53,86 +67,139 @@ class MemberProfileCard extends StatelessWidget {
       member: member,
       width: 128,
       height: 128,
-      borderRadius: BorderRadius.circular(AppRadii.control),
+      borderRadius: BorderRadius.circular(AppRadii.card),
       viewable: true,
     );
-    final edit = OutlinedButton.icon(
-      onPressed: () => context.push(memberPath(scope, edit: true)),
-      icon: const Icon(Icons.edit_outlined, size: 18),
-      label: const Text('Edit member'),
-    );
+    // The profile is the page header, so it sits on the background.
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: SoftPanel(
-        tone: AppTone.neutral,
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('MEMBER PROFILE', style: theme.textTheme.labelSmall),
-            const SizedBox(height: AppSpacing.md),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 288 ||
-                    MediaQuery.textScalerOf(context).scale(14) / 14 > 1.4) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      portrait,
-                      const SizedBox(height: AppSpacing.md),
-                      identity,
-                    ],
-                  );
-                }
-                return Row(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 288 ||
+                  MediaQuery.textScalerOf(context).scale(14) / 14 > 1.4) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     portrait,
-                    const SizedBox(width: AppSpacing.lg),
-                    Expanded(child: identity),
+                    const SizedBox(height: AppSpacing.md),
+                    identity,
                   ],
                 );
-              },
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Align(alignment: Alignment.centerLeft, child: edit),
-            const Divider(height: AppSpacing.xl),
-            MemberInfoLine(
-              icon: Icons.phone_outlined,
-              label: 'Phone',
-              value: member.phone,
-            ),
-            if (member.dateOfBirth != null)
-              MemberInfoLine(
-                icon: Icons.cake_outlined,
-                label: 'Date of birth',
-                value: MaterialLocalizations.of(
-                  context,
-                ).formatShortDate(member.dateOfBirth!.value),
-              ),
-            if (member.gender?.trim().isNotEmpty == true)
-              MemberInfoLine(
-                icon: Icons.person_outline,
-                label: 'Gender',
-                value: member.gender!
-                    .split('_')
-                    .where((part) => part.isNotEmpty)
-                    .map(
-                      (part) => '${part[0].toUpperCase()}${part.substring(1)}',
-                    )
-                    .join(' '),
-              ),
-            if (member.address?.display.isNotEmpty == true)
-              MemberInfoLine(
-                icon: Icons.location_on_outlined,
-                label: 'Address',
-                value: member.address!.display,
-              ),
-          ],
-        ),
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  portrait,
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(child: identity),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
+}
+
+/// Secondary information stays available without competing with membership/dues.
+class MemberDetailsDisclosure extends StatelessWidget {
+  const MemberDetailsDisclosure({
+    super.key,
+    required this.title,
+    required this.children,
+    this.subtitle,
+  });
+  final String title;
+  final String? subtitle;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+    child: Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        key: PageStorageKey(title),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: AppSpacing.lg),
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Semantics(
+          header: true,
+          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+        ),
+        subtitle: subtitle == null ? null : Text(subtitle!),
+        children: children,
+      ),
+    ),
+  );
+}
+
+class MemberPersonalDetails extends StatelessWidget {
+  const MemberPersonalDetails({super.key, required this.member});
+  final MemberProfile member;
+  @override
+  Widget build(BuildContext context) => MemberDetailsDisclosure(
+    title: 'Contact & personal details',
+    subtitle: member.phone,
+    children: [
+      MemberInfoLine(
+        icon: Icons.phone_outlined,
+        label: 'Phone',
+        value: member.phone,
+      ),
+      if (member.dateOfBirth != null)
+        MemberInfoLine(
+          icon: Icons.cake_outlined,
+          label: 'Date of birth',
+          value: MaterialLocalizations.of(
+            context,
+          ).formatShortDate(member.dateOfBirth!.value),
+        ),
+      if (member.gender?.trim().isNotEmpty == true)
+        MemberInfoLine(
+          icon: Icons.person_outline,
+          label: 'Gender',
+          value: member.gender!
+              .split('_')
+              .where((part) => part.isNotEmpty)
+              .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+              .join(' '),
+        ),
+      if (member.address?.display.isNotEmpty == true)
+        MemberInfoLine(
+          icon: Icons.location_on_outlined,
+          label: 'Address',
+          value: member.address!.display,
+        ),
+      if (member.emergencyContact case final EmergencyContact contact) ...[
+        const Divider(height: AppSpacing.xl),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Semantics(
+            header: true,
+            child: Text(
+              'Emergency contact',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+        MemberInfoLine(
+          icon: Icons.contact_phone_outlined,
+          label: contact.relationship ?? 'Contact',
+          value: contact.name,
+        ),
+        MemberInfoLine(
+          icon: Icons.phone_outlined,
+          label: 'Phone',
+          value: contact.phone,
+        ),
+      ],
+    ],
+  );
 }
 
 class MemberInfoLine extends StatelessWidget {
@@ -151,19 +218,10 @@ class MemberInfoLine extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ExcludeSemantics(
-          child: Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: AppSurfaces.of(
-                context,
-              ).panel(AppTone.neutral, Theme.of(context).brightness),
-              borderRadius: BorderRadius.circular(AppRadii.control),
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(width: AppSpacing.md),
@@ -194,35 +252,57 @@ class MemberAmounts extends StatelessWidget {
     required this.balancePaise,
     this.paidLabel = 'Amount paid',
     this.dueLabel = 'Outstanding balance',
+    this.compact = false,
   });
   final int? paidPaise, balancePaise;
   final String paidLabel, dueLabel;
+  final bool compact;
   @override
   Widget build(BuildContext context) {
-    Widget tile(String label, int? amount, AppTone tone) => SoftPanel(
-      tone: tone,
-      backgroundColor: tone == AppTone.pending
-          ? PendingColors.surfaceFor(Theme.of(context).brightness)
-          : null,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
+    Widget tile(String label, int? amount, AppTone tone) {
+      final content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             amount == null ? 'Unavailable' : formatInrPaise(amount),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: amount != null && tone == AppTone.pending
                   ? PendingColors.accentFor(Theme.of(context).brightness)
                   : null,
-              fontWeight: FontWeight.w700,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
-      ),
-    );
+      );
+      if (compact) return content;
+      return SoftPanel(
+        tone: tone,
+        backgroundColor: tone == AppTone.pending
+            ? PendingColors.surfaceFor(Theme.of(context).brightness)
+            : null,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              amount == null ? 'Unavailable' : formatInrPaise(amount),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: amount != null && tone == AppTone.pending
+                    ? PendingColors.accentFor(Theme.of(context).brightness)
+                    : null,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final paid = tile(paidLabel, paidPaise, AppTone.positive);
     final due = tile(
       dueLabel,
@@ -264,26 +344,41 @@ class SavedMembershipSummary extends StatelessWidget {
     super.key,
     required this.membership,
     this.compact = false,
+    this.emphasizeDuration = false,
   });
   final Membership membership;
   final bool compact;
+  final bool emphasizeDuration;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       LayoutBuilder(
         builder: (context, constraints) {
-          final name = Text(
+          final nameText = Text(
             membership.planName,
-            style: compact
+            style: compact && !emphasizeDuration
                 ? Theme.of(context).textTheme.titleMedium
                 : Theme.of(context).textTheme.titleLarge,
           );
+          final name = emphasizeDuration
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PlanDurationInfoButton(
+                      planName: membership.planName,
+                      durationDays: membership.durationDays,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: nameText),
+                  ],
+                )
+              : nameText;
           final status = Semantics(
             label: 'Membership status',
             child: MembershipStatusPill(membership: membership),
           );
-          if (constraints.maxWidth < 300 ||
+          if (constraints.maxWidth < (emphasizeDuration ? 360 : 300) ||
               MediaQuery.textScalerOf(context).scale(14) / 14 > 1.3) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,18 +400,40 @@ class SavedMembershipSummary extends StatelessWidget {
         },
       ),
       const SizedBox(height: AppSpacing.md),
+      if (emphasizeDuration) ...[
+        PlanDurationSummary(durationDays: membership.durationDays),
+        const SizedBox(height: AppSpacing.lg),
+      ],
       MembershipDateRange(
         start: membership.startDate.value,
         end: membership.endDate.value,
       ),
-      if (compact)
+      if (emphasizeDuration) ...[
         Text(
-          '${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)} · UTC calendar',
+          [
+            'Membership dates · gym timezone',
+            if (membership.frozenDays > 0)
+              'includes ${membership.frozenDays} frozen ${membership.frozenDays == 1 ? 'day' : 'days'}',
+            if (membership.discountPaise > 0)
+              '${formatCompactInrPaise(membership.discountPaise)} discount given',
+          ].join(' · '),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Saved plan price: ${formatInrPaise(membership.pricePaise)}',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ] else if (compact)
+        Text(
+          '${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)} · gym timezone',
           style: Theme.of(context).textTheme.bodySmall,
         )
       else ...[
         Text(
-          'Membership dates · UTC calendar',
+          'Membership dates · gym timezone',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: AppSpacing.md),
@@ -337,54 +454,28 @@ class MemberSupportCards extends StatelessWidget {
   const MemberSupportCards({super.key, required this.summary});
   final MemberSummary summary;
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => MemberDetailsDisclosure(
+    title: 'Assigned trainers',
     children: [
-      if (summary.member.emergencyContact case final EmergencyContact contact)
-        ProfileSection(
-          title: 'Emergency contact',
-          icon: Icons.contact_phone_outlined,
-          tone: AppTone.member,
-          children: [
-            MemberInfoLine(
-              icon: Icons.contact_phone_outlined,
-              label: contact.relationship ?? 'Contact',
-              value: contact.name,
-            ),
-            MemberInfoLine(
-              icon: Icons.phone_outlined,
-              label: 'Phone',
-              value: contact.phone,
-            ),
-          ],
+      if (summary.trainers.isEmpty)
+        const Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text('No assigned trainers.'),
         ),
-      ProfileSection(
-        title: 'Gym & trainers',
-        icon: Icons.fitness_center_outlined,
-        tone: AppTone.plan,
-        children: [
-          MemberInfoLine(
-            icon: Icons.storefront_outlined,
-            label: 'Branch',
-            value: summary.branch == null
-                ? 'No current branch available'
-                : '${summary.branch!.name} (${summary.branch!.status})',
-          ),
-          if (summary.trainers.isEmpty) const Text('No assigned trainers.'),
-          for (final trainer in summary.trainers)
-            MemberInfoLine(
-              icon: Icons.fitness_center,
-              label: 'Assigned trainer · ${trainer.code}',
-              value: '${trainer.name}\n${trainer.phone}',
-            ),
-        ],
-      ),
+      for (final trainer in summary.trainers)
+        MemberInfoLine(
+          icon: Icons.fitness_center_outlined,
+          label: 'Assigned trainer · ${trainer.code}',
+          value: '${trainer.name}\n${trainer.phone}',
+        ),
     ],
   );
 }
 
 class MemberLatestPayment extends StatelessWidget {
-  const MemberLatestPayment({super.key, required this.payments});
+  const MemberLatestPayment({super.key, required this.payments, this.timezone});
   final MemberPaymentSummary payments;
+  final String? timezone;
   @override
   Widget build(BuildContext context) {
     final latest = payments.latest;
@@ -405,7 +496,7 @@ class MemberLatestPayment extends StatelessWidget {
       icon: Icons.check_circle_outline,
       label: 'Latest successful payment',
       value:
-          '${formatInrPaise(latest.amountPaise)} · $method\n${formatPaymentDateTime(MaterialLocalizations.of(context), latest.paidAt, timezone: 'UTC')}',
+          '${formatInrPaise(latest.amountPaise)} · $method\n${formatPaymentDateTime(MaterialLocalizations.of(context), latest.paidAt, timezone: timezone)}',
     );
   }
 }

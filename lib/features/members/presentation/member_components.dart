@@ -1,3 +1,6 @@
+import '../../../shared/widgets/membership_date_range.dart';
+import 'member_list_widgets.dart';
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 import '../../../shared/widgets/feedback_notice.dart';
 import 'package:go_router/go_router.dart';
@@ -54,18 +57,22 @@ Widget membershipText(Membership membership) => Builder(
     children: [
       Text(membership.planName, style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 8),
-      Text(
-        'Plan snapshot: ${membership.durationDays} days · ${formatInrPaise(membership.pricePaise)}',
+      IconLabel(
+        'Saved plan price: ${formatInrPaise(membership.pricePaise)} · ${membership.durationDays} days',
         style: Theme.of(context).textTheme.titleMedium,
+        icon: Icons.sell_outlined,
       ),
       const SizedBox(height: 8),
+      MembershipDateRange(
+        start: membership.startDate.value,
+        end: membership.endDate.value,
+      ),
       Text(
-        '${membership.startDate} to ${membership.endDate} (end exclusive)',
+        'End date exclusive · gym timezone',
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      Text(
-        'Status: ${membership.status} · ${membership.currentlyActive ? 'Current' : 'Not current'}',
-      ),
+      const SizedBox(height: 8),
+      MembershipStatusPill(membership: membership),
     ],
   ),
 );

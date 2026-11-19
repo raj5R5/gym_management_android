@@ -1,3 +1,4 @@
+import '../../../shared/widgets/field_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/design_tokens.dart';
@@ -65,6 +66,7 @@ class OnboardingPaymentStep extends StatelessWidget {
                 ),
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
+                  prefixIcon: FieldIcon('amount'),
                   labelText: 'Initial payment amount (INR)',
                   prefixText: '₹ ',
                   helperText:
@@ -76,10 +78,14 @@ class OnboardingPaymentStep extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.lg),
               DropdownButtonFormField<PaymentMethod>(
+                itemHeight: null,
                 key: const ValueKey('initialPaymentMethod'),
                 isExpanded: true,
                 initialValue: draft.paymentMethod,
-                decoration: const InputDecoration(labelText: 'Payment method'),
+                decoration: const InputDecoration(
+                  prefixIcon: FieldIcon('method'),
+                  labelText: 'Payment method',
+                ),
                 items: [
                   for (final method in PaymentMethod.values)
                     DropdownMenuItem(
@@ -105,6 +111,7 @@ class OnboardingPaymentStep extends StatelessWidget {
                 initialValue: draft.paymentReference,
                 maxLength: 120,
                 decoration: InputDecoration(
+                  prefixIcon: const FieldIcon('reference'),
                   labelText: requiredReference
                       ? 'Payment reference (required)'
                       : 'Payment reference (optional)',

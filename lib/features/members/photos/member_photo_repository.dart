@@ -33,6 +33,7 @@ class DioMemberPhotoRepository implements MemberPhotoRepository {
   DioMemberPhotoRepository(this.client);
   final Dio client;
   String _path(MemberPhotoTarget target) {
+    if (target.isOwner) return 'gyms/${target.scope.gymId}/owner-profile/photo';
     if (target.memberId == null) {
       throw const MemberPhotoFailure(
         'Save the member before uploading a photo.',
@@ -58,6 +59,8 @@ class DioMemberPhotoRepository implements MemberPhotoRepository {
         ? data['error']['code'] as String?
         : null;
     final message = switch (code) {
+      'MINOR_MEMBER_WORKFLOW_UNAVAILABLE' =>
+        'Under-18 photo uploads are unavailable until guardian authorization and verification are supported. An existing photo can still be removed.',
       'PHOTO_STORAGE_UNAVAILABLE' =>
         'Photo storage is unavailable. Your selection is saved on this device; retry later.',
       'PHOTO_TOO_LARGE' => 'Choose a photo no larger than 5 MB.',
@@ -90,7 +93,9 @@ class DioMemberPhotoRepository implements MemberPhotoRepository {
       final receipt = MemberPhotoReceipt.fromJson(
         Map<String, dynamic>.from(response['data'] as Map),
       );
-      if (receipt.memberId != target.memberId || receipt.revision < 0) {
+      if (receipt.memberId != target.subjectId ||
+          receipt.revision < 0 ||
+          target.isOwner && response['data']['gymId'] != target.scope.gymId) {
         throw const FormatException();
       }
       if (receipt.url != null &&

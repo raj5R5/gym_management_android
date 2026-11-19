@@ -85,7 +85,7 @@ class OnboardingWizardState {
     memberIssue('First name', validateName(firstName));
     memberIssue('Last name', validateName(lastName));
     memberIssue('Phone', validatePhone(phone));
-    memberIssue('Date of birth', validateBirthDate(dateOfBirth));
+    memberIssue('Date of birth', validateMemberBirthDate(dateOfBirth));
     memberIssue(
       'Gender',
       gender.isEmpty || memberGenders.contains(gender)
@@ -242,7 +242,7 @@ class OnboardingWizardState {
           : OnboardingMembership(
               planId: selectedPlan!.id,
               // No start-date field is collected. Omitting it lets the backend
-              // resolve UTC today on the first successful atomic attempt.
+              // resolve gym-local today on the first successful atomic attempt.
               payment: toInitialPayment(paidAt: paidAt),
             ),
     );
