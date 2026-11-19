@@ -5,6 +5,8 @@ enum AppEnvironment { development, staging, production }
 
 /// Public build configuration only. Dart defines are not a secret store.
 class AppConfig {
+  static const productionApiBaseUrl = 'https://gym-api.semgroup.in/api/v1/';
+
   const AppConfig._({
     required this.environment,
     required this.apiBaseUrl,
@@ -37,6 +39,9 @@ class AppConfig {
         'Release builds require an explicit APP_ENV.',
       ),
     };
+    if (isRelease && environment != AppEnvironment.production) {
+      throw const FormatException('Release builds require APP_ENV=production.');
+    }
 
     Uri? baseUrl;
     if (apiBaseUrl.isNotEmpty) {
@@ -65,6 +70,11 @@ class AppConfig {
     } else if (environment != AppEnvironment.development || isRelease) {
       throw const FormatException(
         'API_BASE_URL is required for staging, production, and release builds.',
+      );
+    }
+    if (isRelease && baseUrl.toString() != productionApiBaseUrl) {
+      throw const FormatException(
+        'Release builds require the approved MuscleDesk production API URL.',
       );
     }
 

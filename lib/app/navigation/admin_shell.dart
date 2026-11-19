@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../features/branches/branches.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,8 +7,13 @@ import '../../features/admin_dashboard/providers/dashboard_providers.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/providers/session_controller.dart';
 import '../router/app_routes.dart';
+import '../theme/design_tokens.dart';
 import 'foundation_screens.dart';
-import '../../shared/widgets/brand_mark.dart';
+import '../../features/owner_profile/owner_profile_widgets.dart';
+import '../../features/owner_profile/owner_profile.dart';
+import '../../features/owner_profile/owner_signup_photo.dart';
+import '../../shared/widgets/glass_tab_bar.dart';
+import '../../shared/widgets/titanium_surface.dart';
 import 'form_navigation_guard.dart';
 
 class AdminShell extends ConsumerWidget {
@@ -33,6 +39,9 @@ class AdminShell extends ConsumerWidget {
     if (session is! SessionAuthenticated && !refreshing || selected == null) {
       return const SizedBox.shrink();
     }
+    ref.watch(ownerSignupPhotoRecoveryProvider);
+    final ownerProfile = currentOwnerProfile(ref);
+    final branchNames = ref.watch(branchNamesProvider);
     final memberDetail = location.startsWith('${AppRoutes.members}/');
     // The identity contract has no gym names. Use ordinal scope labels on the
     // member overview, while retaining the actual IDs as selector values.
@@ -41,12 +50,16 @@ class AdminShell extends ConsumerWidget {
     ).hasMatch(location);
     final trainerDetail = location.startsWith('${AppRoutes.trainers}/');
     final planDetail = location.startsWith('${AppRoutes.plans}/');
-    final attendance =
-        location == AppRoutes.attendance ||
-        location.startsWith('${AppRoutes.attendance}/');
-    final attendanceDetail = location.startsWith('${AppRoutes.attendance}/');
     final profileDetail =
-        attendanceDetail ||
+        location == AppRoutes.ownerProfile ||
+        location == AppRoutes.gymSettings ||
+        location.startsWith(AppRoutes.checkIn) ||
+        location == AppRoutes.expenses ||
+        location.startsWith(AppRoutes.leads) ||
+        location.startsWith(AppRoutes.pt) ||
+        location == AppRoutes.paymentClaims ||
+        location.startsWith(AppRoutes.reports) ||
+        location == AppRoutes.branches ||
         memberDetail ||
         trainerDetail ||
         planDetail ||
@@ -61,6 +74,12 @@ class AdminShell extends ConsumerWidget {
         ? 0
         : destinations.indexOf(location);
     final gymField = GlobalKey<FormFieldState<String>>();
+    final showTabs =
+        location != AppRoutes.more &&
+        location != AppRoutes.ownerProfile &&
+        location != AppRoutes.gymSettings &&
+        location != AppRoutes.checkInScan;
+    final tabSpace = GlassTabBar.space(context);
     final shell = PopScope(
       canPop: profileDetail || index == 0,
       onPopInvokedWithResult: (didPop, _) {
@@ -68,7 +87,21 @@ class AdminShell extends ConsumerWidget {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Gym Management'),
+          backgroundColor: Colors.transparent,
+          title: Text(
+            'MUSCLEDESK',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              letterSpacing: 1.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          flexibleSpace: TitaniumGlass(
+            radius: 0,
+            opacity: AppGlass.navigation(Theme.of(context).brightness),
+            blur: AppGlass.navigationBlur,
+            highlightOpacity: AppGlass.navigationHighlight,
+            child: const SizedBox.expand(),
+          ),
           automaticallyImplyLeading: false,
           leading: Builder(
             builder: (context) => IconButton(
@@ -82,30 +115,33 @@ class AdminShell extends ConsumerWidget {
           child: SafeArea(
             child: ListView(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const BrandMark(),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Gym Management',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Admin navigation',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
+                OwnerDrawerHeader(
+                  openProfile: () {
+                    Navigator.of(context).pop();
+                    // Open the editor once the profile is loaded; otherwise
+                    // More shows the loading/retry state for the profile.
+                    final target = ownerProfile != null
+                        ? AppRoutes.ownerProfile
+                        : AppRoutes.more;
+                    if (location == target) return;
+                    if (!profileDetail) {
+                      context.push(target);
+                    } else {
+                      context.go(target);
+                    }
+                  },
                 ),
                 ...{
                   'Dashboard': AppRoutes.dashboard,
                   'Members': AppRoutes.members,
                   'Trainers': AppRoutes.trainers,
+                  'Personal training': AppRoutes.pt,
                   'Plans': AppRoutes.plans,
+                  'Check in': AppRoutes.checkIn,
+                  'Enquiries': AppRoutes.leads,
+                  'Expenses': AppRoutes.expenses,
+                  'Reports': AppRoutes.reports,
+                  'Branches': AppRoutes.branches,
                   'More': AppRoutes.more,
                 }.entries.map(
                   (entry) => ListTile(
@@ -114,6 +150,13 @@ class AdminShell extends ConsumerWidget {
                       AppRoutes.members => Icons.people_outline,
                       AppRoutes.trainers => Icons.fitness_center_outlined,
                       AppRoutes.plans => Icons.card_membership_outlined,
+                      AppRoutes.checkIn => Icons.qr_code_scanner,
+                      AppRoutes.leads => Icons.contact_phone_outlined,
+                      AppRoutes.pt => Icons.sports_gymnastics_outlined,
+                      AppRoutes.reports => Icons.insert_chart_outlined,
+                      AppRoutes.branches => Icons.storefront_outlined,
+                      AppRoutes.expenses =>
+                        Icons.account_balance_wallet_outlined,
                       _ => Icons.more_horiz,
                     }),
                     title: Text(entry.key),
@@ -123,7 +166,16 @@ class AdminShell extends ConsumerWidget {
                     onTap: () {
                       Navigator.of(context).pop();
                       if (location == entry.value) return;
-                      if (entry.value == AppRoutes.more && !profileDetail) {
+                      if ({
+                            AppRoutes.more,
+                            AppRoutes.checkIn,
+                            AppRoutes.leads,
+                            AppRoutes.pt,
+                            AppRoutes.reports,
+                            AppRoutes.expenses,
+                            AppRoutes.branches,
+                          }.contains(entry.value) &&
+                          !profileDetail) {
                         // Account is a drawer page, not a tab. Retain the
                         // previous tab so Android Back has a route to pop.
                         // Detail/form exits still use go(), preserving the
@@ -140,6 +192,7 @@ class AdminShell extends ConsumerWidget {
           ),
         ),
         body: SafeArea(
+          bottom: !showTabs,
           child: Column(
             children: [
               Padding(
@@ -151,18 +204,19 @@ class AdminShell extends ConsumerWidget {
                     ? DropdownButtonFormField<String>(
                         key: gymField,
                         initialValue: selected.gymId,
-                        decoration: const InputDecoration(
-                          labelText: 'Admin gym',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Branch'),
                         isExpanded: true,
                         items: gyms
                             .map(
                               (id) => DropdownMenuItem(
                                 value: id,
                                 child: Text(
-                                  memberOverview
-                                      ? 'Gym ${gyms.indexOf(id) + 1}'
-                                      : 'Gym $id',
+                                  // Branch names come from the owner summary;
+                                  // the identity contract itself has no names.
+                                  branchNames[id] ??
+                                      (memberOverview
+                                          ? 'Gym ${gyms.indexOf(id) + 1}'
+                                          : 'Gym $id'),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -185,85 +239,75 @@ class AdminShell extends ConsumerWidget {
                         },
                       )
                     : Text(
-                        memberOverview
-                            ? 'Current gym'
-                            : 'Current gym · All branches',
+                        ownerProfile?.gymName ??
+                            (memberOverview ? 'Current gym' : 'Current gym'),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
               ),
-              Expanded(child: child),
+              Expanded(
+                child: showTabs
+                    ? MediaQuery.removePadding(
+                        context: context,
+                        removeBottom: true,
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: tabSpace),
+                          // Page transitions (see TitaniumPageTransitions)
+                          // animate each change; a second entrance here would
+                          // fade the whole stack in again.
+                          child: child,
+                        ),
+                      )
+                    : child,
+              ),
             ],
           ),
         ),
         // More remains a drawer-only account page. It has no matching tab,
         // so omit the bar rather than falsely selecting Dashboard.
-        bottomNavigationBar: attendance || location == AppRoutes.more
-            ? null
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  final theme = Theme.of(context);
-                  final baseStyle = theme.textTheme.labelMedium!.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0,
-                  );
-                  // Match NavigationBar's own maximum label scaling. Measure
-                  // the longest label before layout so all four labels use the
-                  // same size and neither selection nor scaling causes a wrap.
-                  final painter = TextPainter(
-                    text: TextSpan(text: 'Dashboard', style: baseStyle),
-                    textDirection: Directionality.of(context),
-                    textScaler: MediaQuery.textScalerOf(
-                      context,
-                    ).clamp(maxScaleFactor: 1.3),
-                  )..layout();
-                  final available = constraints.maxWidth / 4 - 8;
-                  final fontSize =
-                      12 * (available / painter.width).clamp(0.0, 1.0);
-                  painter.dispose();
-                  return NavigationBar(
-                    labelBehavior:
-                        NavigationDestinationLabelBehavior.alwaysShow,
-                    labelPadding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                    labelTextStyle: WidgetStateProperty.resolveWith(
-                      (states) => baseStyle.copyWith(
-                        fontSize: fontSize,
-                        color: states.contains(WidgetState.selected)
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    selectedIndex: index < 0 ? 0 : index,
-                    onDestinationSelected: (value) =>
-                        context.go(destinations[value]),
-                    destinations: const [
-                      NavigationDestination(
-                        icon: Icon(Icons.dashboard_outlined),
-                        label: 'Dashboard',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.people_outline),
-                        label: 'Members',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.fitness_center),
-                        label: 'Trainers',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.card_membership_outlined),
-                        label: 'Plans',
-                      ),
-                    ],
-                  );
-                },
-              ),
+        extendBody: showTabs,
+        bottomNavigationBar: showTabs
+            ? GlassTabBar(
+                // -1 on drawer pages (Check in, Expenses): no tab is lit, so
+                // every tab, including Dashboard, navigates when tapped.
+                selectedIndex: index,
+                onSelected: (value) => context.go(destinations[value]),
+                tabs: const [
+                  GlassTab(
+                    label: 'Dashboard',
+                    icon: Icons.space_dashboard_outlined,
+                    selectedIcon: Icons.space_dashboard_rounded,
+                  ),
+                  GlassTab(
+                    label: 'Members',
+                    icon: Icons.group_outlined,
+                    selectedIcon: Icons.group_rounded,
+                  ),
+                  GlassTab(
+                    label: 'Trainers',
+                    icon: Icons.fitness_center_outlined,
+                    selectedIcon: Icons.fitness_center_rounded,
+                  ),
+                  GlassTab(
+                    label: 'Plans',
+                    icon: Icons.card_membership_outlined,
+                    selectedIcon: Icons.card_membership_rounded,
+                  ),
+                ],
+              )
+            : null,
       ),
     );
     return Stack(
       children: [
         Offstage(
           offstage: refreshing,
-          child: TickerMode(enabled: !refreshing, child: shell),
+          child: TickerMode(
+            enabled: !refreshing,
+            child: TitaniumCanvas(
+              animated: location == AppRoutes.dashboard,
+              child: shell,
+            ),
+          ),
         ),
         if (refreshing) const StartupScreen(),
       ],

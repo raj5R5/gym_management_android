@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../shared/widgets/confirm_dialog.dart';
 
 final formNavigationGuardProvider = Provider((ref) => FormNavigationRegistry());
 
@@ -36,22 +37,14 @@ class FormNavigationRegistry {
       final discard = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          scrollable: true,
-          title: const Text('Discard unsaved changes?'),
-          content: const Text(
-            'Your changes have not been saved. Keep editing to finish, or discard them to leave this form.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep editing'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard changes'),
-            ),
-          ],
+        builder: (context) => ConfirmDialog(
+          title: 'Discard unsaved changes?',
+          message: 'What you entered in this form will be lost.',
+          keepLabel: 'Keep editing',
+          confirmLabel: 'Discard changes',
+          destructive: true,
+          onKeep: () => Navigator.pop(context, false),
+          onConfirm: () => Navigator.pop(context, true),
         ),
       );
       return discard == true &&

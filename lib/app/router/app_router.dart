@@ -1,6 +1,21 @@
 import 'package:flutter/material.dart';
+import '../../features/branches/branches_page.dart';
+import '../../features/leads/lead_detail_page.dart';
+import '../../features/leads/leads_page.dart';
+import '../../features/leads/leads.dart';
+import '../../features/expenses/expenses_page.dart';
+import '../../features/member_app/activation_page.dart';
+import '../../features/member_app/payment_claims.dart';
+import '../../features/reports/reports.dart';
+import '../../features/reports/reports_page.dart';
+import '../../features/personal_training/pt_pages.dart';
+import '../../features/personal_training/trainer_home_page.dart';
+import '../../features/visits/today_visits_page.dart';
+import '../../features/visits/qr_scan_page.dart';
+import '../../features/visits/check_in_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/gym_settings/gym_settings_page.dart';
 
 import '../../features/admin_dashboard/presentation/dashboard_page.dart';
 import '../../features/members/presentation/members_page.dart';
@@ -16,10 +31,14 @@ import '../../features/memberships/presentation/outstanding_dues_page.dart';
 import '../../features/trainers/presentation/trainers_page.dart';
 import '../../features/trainers/presentation/trainer_details_page.dart';
 import '../../features/trainers/presentation/trainer_form_page.dart';
+import '../../features/owner_profile/owner_profile_page.dart';
 import '../../features/auth/models/auth_models.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/owner_signup_page.dart';
+import '../../features/auth/presentation/password_recovery_page.dart';
+import '../../features/account_privacy/privacy_support_page.dart';
+import '../../features/account_privacy/account_deletion_page.dart';
 import '../../features/auth/models/owner_registration.dart';
 import '../../features/auth/providers/session_controller.dart';
 import '../../shared/widgets/message_page.dart';
@@ -27,8 +46,64 @@ import '../navigation/admin_shell.dart';
 import '../navigation/form_navigation_guard.dart';
 import '../navigation/foundation_screens.dart';
 import 'app_routes.dart';
-import '../../features/attendance/presentation/attendance_page.dart';
-import '../../features/attendance/presentation/check_in_page.dart';
+
+/// Where [path] should go for [current]; null keeps it. Pure, for testing.
+String? appRedirect(SessionState current, String path) {
+  // Public policy/help must remain reachable even during restoration errors.
+  if (path == AppRoutes.privacySupport) return null;
+  if (path == AppRoutes.passwordRecovery) return null;
+  if (path == AppRoutes.activate) return null;
+  String? target;
+  final isAdmin =
+      current is SessionAuthenticated &&
+      current.identity.user.status == AccountStatus.active &&
+      current.identity.gymAccess.any(
+        (grant) =>
+            grant.role == AuthRole.admin &&
+            grant.status == AccountStatus.active,
+      );
+  final adminPath = path.startsWith('${AppRoutes.home}/');
+  // Any shell page survives access-token recovery: AdminShell keeps it
+  // offstage behind the startup screen until the session is back.
+  final profileRoute =
+      path == AppRoutes.accountDeletion ||
+      path.startsWith('${AppRoutes.home}/');
+  if (current is SessionInitial ||
+      current is SessionLoading &&
+          current.operation == SessionOperation.restoring) {
+    target = AppRoutes.startup;
+  } else if (current is SessionLoading &&
+      current.operation == SessionOperation.refreshing) {
+    // Retain profile forms/read scopes during interceptor recovery. AdminShell
+    // hides the protected subtree and shows startup until recovery finishes.
+    target = profileRoute ? null : AppRoutes.startup;
+  } else if (current is SessionLoading &&
+      current.operation == SessionOperation.loggingOut) {
+    target = AppRoutes.home;
+  } else if (current is SessionError && current.canRetryRestoration) {
+    // Keep a recoverable startup failure separate from an invalid session.
+    // Signing in remains an explicit alternative to retrying restoration.
+    target = path == AppRoutes.login ? null : AppRoutes.startup;
+  } else if (current is SessionAuthenticated) {
+    if (path == '/' ||
+        path == AppRoutes.startup ||
+        path == AppRoutes.login ||
+        path == AppRoutes.signup ||
+        (path == AppRoutes.home && isAdmin)) {
+      target = isAdmin ? AppRoutes.dashboard : AppRoutes.home;
+    }
+    if (adminPath && !isAdmin) target = AppRoutes.home;
+  } else {
+    if (path == '/' ||
+        path == AppRoutes.startup ||
+        path == AppRoutes.home ||
+        path == AppRoutes.accountDeletion ||
+        adminPath) {
+      target = AppRoutes.login;
+    }
+  }
+  return target == path ? null : target;
+}
 
 GoRouter createAppRouter({
   required SessionState Function() session,
@@ -47,62 +122,24 @@ GoRouter createAppRouter({
   return GoRouter(
     initialLocation: AppRoutes.startup,
     refreshListenable: refreshListenable,
-    redirect: (context, route) {
-      final current = session();
-      final path = route.uri.path;
-      String? target;
-      final isAdmin =
-          current is SessionAuthenticated &&
-          current.identity.user.status == AccountStatus.active &&
-          current.identity.gymAccess.any(
-            (grant) =>
-                grant.role == AuthRole.admin &&
-                grant.status == AccountStatus.active,
-          );
-      final adminPath = path.startsWith('${AppRoutes.home}/');
-      final profileRoute =
-          path == AppRoutes.revenue ||
-          path == AppRoutes.outstandingDues ||
-          path == AppRoutes.attendance ||
-          path.startsWith('${AppRoutes.attendance}/') ||
-          path == AppRoutes.plans ||
-          path.startsWith('${AppRoutes.plans}/') ||
-          path == AppRoutes.members ||
-          path.startsWith('${AppRoutes.members}/') ||
-          path == AppRoutes.trainers ||
-          path.startsWith('${AppRoutes.trainers}/');
-      if (current is SessionInitial ||
-          current is SessionLoading &&
-              current.operation == SessionOperation.restoring) {
-        target = AppRoutes.startup;
-      } else if (current is SessionLoading &&
-          current.operation == SessionOperation.refreshing) {
-        // Retain profile forms/read scopes during interceptor recovery. AdminShell
-        // hides the protected subtree and shows startup until recovery finishes.
-        target = profileRoute ? null : AppRoutes.startup;
-      } else if (current is SessionLoading &&
-          current.operation == SessionOperation.loggingOut) {
-        target = AppRoutes.home;
-      } else if (current is SessionAuthenticated) {
-        if (path == '/' ||
-            path == AppRoutes.startup ||
-            path == AppRoutes.login ||
-            path == AppRoutes.signup ||
-            (path == AppRoutes.home && isAdmin)) {
-          target = isAdmin ? AppRoutes.dashboard : AppRoutes.home;
-        }
-        if (adminPath && !isAdmin) target = AppRoutes.home;
-      } else {
-        if (path == '/' ||
-            path == AppRoutes.startup ||
-            path == AppRoutes.home ||
-            adminPath) {
-          target = AppRoutes.login;
-        }
-      }
-      return target == path ? null : target;
-    },
+    redirect: (context, route) => appRedirect(session(), route.uri.path),
     routes: [
+      GoRoute(
+        path: AppRoutes.passwordRecovery,
+        builder: (_, _) => const PasswordRecoveryPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.activate,
+        builder: (_, _) => const ActivationPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.privacySupport,
+        builder: (_, _) => const PrivacySupportPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.accountDeletion,
+        builder: (_, _) => const AccountDeletionPage(),
+      ),
       GoRoute(
         path: AppRoutes.startup,
         builder: (_, _) => const StartupScreen(),
@@ -117,10 +154,7 @@ GoRouter createAppRouter({
         path: AppRoutes.signup,
         builder: (_, _) => const OwnerSignupPage(),
       ),
-      GoRoute(
-        path: AppRoutes.home,
-        builder: (_, _) => const AuthenticatedHomeScreen(),
-      ),
+      GoRoute(path: AppRoutes.home, builder: (_, _) => const RoleHome()),
       ShellRoute(
         builder: (context, state, child) =>
             AdminShell(location: state.uri.path, child: child),
@@ -154,6 +188,11 @@ GoRouter createAppRouter({
                 onExit: protectForm,
                 builder: (_, state) => MemberOnboardingPage(
                   gymId: state.uri.queryParameters['gymId'],
+                  // Converting an enquiry passes its name and phone in memory,
+                  // never in the URL.
+                  prefill: state.extra is LeadPrefill
+                      ? state.extra! as LeadPrefill
+                      : null,
                 ),
               ),
               GoRoute(
@@ -249,21 +288,80 @@ GoRouter createAppRouter({
             ],
           ),
           GoRoute(
-            path: AppRoutes.attendance,
-            builder: (_, _) => const AttendancePageView(),
+            path: AppRoutes.branches,
+            builder: (_, _) => const BranchesPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.leads,
+            builder: (_, _) => const LeadsPage(),
             routes: [
               GoRoute(
-                path: 'check-in',
-                builder: (_, state) => CheckInPage(
-                  gymId: state.uri.queryParameters['gymId'],
-                  selectOnly: state.uri.queryParameters['mode'] == 'filter',
+                path: ':leadId',
+                builder: (_, state) =>
+                    LeadDetailPage(leadId: state.pathParameters['leadId']!),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: AppRoutes.reports,
+            builder: (_, _) => const ReportsPage(),
+            routes: [
+              GoRoute(
+                path: ':kind',
+                builder: (_, state) {
+                  final kind = ReportKind.parse(state.pathParameters['kind']!);
+                  return kind == null
+                      ? const ReportsPage()
+                      : ReportPage(kind: kind);
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: AppRoutes.paymentClaims,
+            builder: (_, _) => const PaymentClaimsPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.pt,
+            builder: (_, _) => const PtPage(),
+            routes: [
+              GoRoute(
+                path: ':packageId',
+                builder: (_, state) => PtPackageDetailPage(
+                  packageId: state.pathParameters['packageId']!,
                 ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: AppRoutes.expenses,
+            builder: (_, _) => const ExpensesPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.checkIn,
+            builder: (_, _) => const CheckInPage(),
+            routes: [
+              GoRoute(path: 'scan', builder: (_, _) => const QrScanPage()),
+              GoRoute(
+                path: 'today',
+                builder: (_, _) => const TodayVisitsPage(),
               ),
             ],
           ),
           GoRoute(
             path: AppRoutes.more,
             builder: (_, _) => const AuthenticatedHomeScreen(embedded: true),
+            routes: [
+              GoRoute(
+                path: 'profile',
+                builder: (_, _) => const OwnerProfilePage(),
+                onExit: protectForm,
+              ),
+              GoRoute(
+                path: 'settings',
+                builder: (_, _) => const GymSettingsPage(),
+              ),
+            ],
           ),
         ],
       ),

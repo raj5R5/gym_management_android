@@ -61,8 +61,16 @@ class FeedbackNotice extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.sm),
               child: primaryRetry
-                  ? FilledButton(onPressed: retry, child: const Text('Retry'))
-                  : TextButton(onPressed: retry, child: const Text('Retry')),
+                  ? FilledButton.icon(
+                      onPressed: retry,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    )
+                  : TextButton.icon(
+                      onPressed: retry,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
             ),
         ],
       ),

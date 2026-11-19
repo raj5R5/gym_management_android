@@ -2,6 +2,10 @@ abstract final class AppRoutes {
   static const startup = '/startup';
   static const login = '/login';
   static const signup = '/sign-up';
+  static const passwordRecovery = '/recover-access';
+  static const activate = '/activate';
+  static const privacySupport = '/privacy-support';
+  static const accountDeletion = '/account-deletion';
   static const home = '/home';
   static const dashboard = '/home/dashboard';
   static const revenue = '/home/dashboard/revenue';
@@ -9,6 +13,16 @@ abstract final class AppRoutes {
   static const members = '/home/members';
   static const trainers = '/home/trainers';
   static const plans = '/home/plans';
-  static const attendance = '/home/attendance';
   static const more = '/home/more';
+  static const ownerProfile = '/home/more/profile';
+  static const gymSettings = '/home/more/settings';
+  static const checkIn = '/home/check-in';
+  static const expenses = '/home/expenses';
+  static const leads = '/home/leads';
+  static const branches = '/home/branches';
+  static const pt = '/home/pt';
+  static const paymentClaims = '/home/payment-claims';
+  static const reports = '/home/reports';
+  static const checkInScan = '/home/check-in/scan';
+  static const todayVisits = '/home/check-in/today';
 }

@@ -46,6 +46,51 @@ void main() {
     expect(() => AppConfig.fromValues(isRelease: true), throwsFormatException);
   });
 
+  for (final environment in ['development', 'staging']) {
+    test('release rejects $environment even with the production API', () {
+      expect(
+        () => AppConfig.fromValues(
+          environmentName: environment,
+          apiBaseUrl: AppConfig.productionApiBaseUrl,
+          isRelease: true,
+        ),
+        throwsFormatException,
+      );
+    });
+  }
+
+  test(
+    'release uses the approved production API without development routes',
+    () {
+      final config = AppConfig.fromValues(
+        environmentName: 'production',
+        apiBaseUrl: AppConfig.productionApiBaseUrl,
+        isRelease: true,
+      );
+      expect(config.apiBaseUrl.toString(), AppConfig.productionApiBaseUrl);
+      expect(config.developmentHomeEnabled, isFalse);
+    },
+  );
+
+  for (final url in [
+    'https://staging.gym-company.com/api/v1/',
+    'https://gym-api.semgroup.in/',
+    'https://gym-api.semgroup.in/api/v2/',
+    'http://gym-api.semgroup.in/api/v1/',
+    'https://localhost/api/v1/',
+  ]) {
+    test('release rejects an unapproved API: $url', () {
+      expect(
+        () => AppConfig.fromValues(
+          environmentName: 'production',
+          apiBaseUrl: url,
+          isRelease: true,
+        ),
+        throwsFormatException,
+      );
+    });
+  }
+
   for (final url in [
     '/api',
     'not a URL',

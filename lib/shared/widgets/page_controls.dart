@@ -1,3 +1,4 @@
+import '../../app/theme/design_tokens.dart';
 import 'package:flutter/material.dart';
 
 class PageControls extends StatelessWidget {
@@ -14,7 +15,7 @@ class PageControls extends StatelessWidget {
   Widget build(BuildContext context) => Wrap(
     alignment: WrapAlignment.center,
     crossAxisAlignment: WrapCrossAlignment.center,
-    spacing: 8,
+    spacing: AppSpacing.sm,
     children: [
       IconButton(
         tooltip: 'Previous page',

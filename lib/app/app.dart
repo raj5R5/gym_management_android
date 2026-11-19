@@ -6,9 +6,12 @@ import '../features/auth/models/session_state.dart';
 import '../features/auth/providers/session_controller.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
+import '../shared/widgets/titanium_surface.dart';
+import '../shared/widgets/ambient_motion.dart';
 
 class GymApp extends ConsumerStatefulWidget {
-  const GymApp({super.key});
+  const GymApp({super.key, this.animateDecorations = true});
+  final bool animateDecorations;
 
   @override
   ConsumerState<GymApp> createState() => _GymAppState();
@@ -32,17 +35,22 @@ class _GymAppState extends ConsumerState<GymApp> {
     try {
       await ref.read(sessionControllerProvider.notifier).restoreSession();
     } on AuthFailure {
-      // Recovery already clears unsafe credentials and publishes SessionError.
+      // Recovery publishes SessionError, preserving credentials when retryable.
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Gym Management',
+      title: 'MuscleDesk',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
+      builder: (context, child) => AmbientMotionSettings(
+        enabled: widget.animateDecorations,
+        child: TitaniumCanvas(child: child ?? const SizedBox.shrink()),
+      ),
       routerConfig: ref.watch(appRouterProvider),
     );
   }

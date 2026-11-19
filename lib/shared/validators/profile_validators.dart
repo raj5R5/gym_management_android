@@ -33,3 +33,22 @@ String? validateBirthDate(String? value) {
     return 'Enter a valid date as YYYY-MM-DD.';
   }
 }
+
+/// A provisional form check; the backend uses the authorized gym calendar.
+/// Blank DOB remains optional and must not be described as verified adulthood.
+String? validateMemberBirthDate(String? value, {DateTime? today}) {
+  final basic = validateBirthDate(value);
+  if (basic != null || (value ?? '').trim().isEmpty) return basic;
+  final birth = CalendarDate.parse(value!.trim()).value;
+  final day = today ?? DateTime.now().toUtc();
+  final age =
+      day.year -
+      birth.year -
+      ((day.month < birth.month ||
+              day.month == birth.month && day.day < birth.day)
+          ? 1
+          : 0);
+  return age < 18
+      ? 'Under-18 registration is unavailable until guardian authorization and verification are supported.'
+      : null;
+}

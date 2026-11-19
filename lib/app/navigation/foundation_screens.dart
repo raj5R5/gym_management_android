@@ -11,29 +11,60 @@ import '../../features/auth/providers/session_controller.dart';
 import '../../shared/widgets/message_page.dart';
 import '../../shared/widgets/brand_mark.dart';
 import '../../shared/widgets/profile_section.dart';
+import '../../features/owner_profile/owner_profile_widgets.dart';
+import '../../features/account_privacy/privacy_support_page.dart';
 
-class StartupScreen extends StatelessWidget {
+class StartupScreen extends ConsumerWidget {
   const StartupScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            BrandMark(),
-            SizedBox(height: 32),
-            CircularProgressIndicator(semanticsLabel: 'Restoring session'),
-            SizedBox(height: 24),
-            Text('Gym Management'),
-            SizedBox(height: 8),
-            Text('Restoring your session…'),
-          ],
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionControllerProvider);
+    if (session is SessionError && session.canRetryRestoration) {
+      return MessagePage(
+        title: 'Could not restore your session',
+        message:
+            '${session.failure.message} Your saved sign-in has been kept. '
+            'Retry when the connection or secure storage is available.',
+        actions: [
+          FilledButton(
+            onPressed: () async {
+              try {
+                await ref
+                    .read(sessionControllerProvider.notifier)
+                    .restoreSession();
+              } on AuthFailure {
+                // The repository publishes the next safe recovery state.
+              }
+            },
+            child: const Text('Retry session restoration'),
+          ),
+          TextButton(
+            onPressed: () => context.go(AppRoutes.login),
+            child: const Text('Sign in instead'),
+          ),
+        ],
+      );
+    }
+    return const Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(width: 52, child: BrandMark()),
+              SizedBox(height: 32),
+              CircularProgressIndicator(semanticsLabel: 'Restoring session'),
+              SizedBox(height: 24),
+              Text('MuscleDesk'),
+              SizedBox(height: 8),
+              Text('Restoring your session…'),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Authenticated navigation placeholder. No gym features or extra API calls.
@@ -69,20 +100,33 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
           ? 'Account and gym management.'
           : 'You are signed in.',
       actions: [
-        if (!loggingOut && user != null)
+        if (!loggingOut && embedded && ref.watch(adminGymProvider) != null)
+          const OwnerAccountSection(),
+        if (!loggingOut && user != null && !embedded)
           ProfileSection(
             title: 'Your account',
             icon: Icons.person_outline,
             children: [
               Text(user.email, style: Theme.of(context).textTheme.bodyLarge),
-              const SizedBox(height: 8),
-              const Text('Manage your gym from one workspace.'),
+              if (ref.watch(adminGymProvider) != null) ...[
+                const SizedBox(height: 8),
+                const Text('Manage your gym from one workspace.'),
+              ],
             ],
           ),
         if (embedded && ref.watch(adminGymProvider) != null)
-          OutlinedButton(
+          OutlinedButton.icon(
+            onPressed: loggingOut
+                ? null
+                : () => context.push(AppRoutes.gymSettings),
+            icon: const Icon(Icons.tune_outlined),
+            label: const Text('Gym settings'),
+          ),
+        if (embedded && ref.watch(adminGymProvider) != null)
+          OutlinedButton.icon(
             onPressed: loggingOut ? null : () => context.push(AppRoutes.plans),
-            child: const Text('Membership Plans'),
+            icon: const Icon(Icons.card_membership_outlined),
+            label: const Text('Membership Plans'),
           ),
         FilledButton(
           style: AppButtonStyles.warning(context),
@@ -114,6 +158,13 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
                 )
               : const Text('Logout'),
         ),
+        if (!loggingOut) const PrivacySupportLink(),
+        if (!loggingOut && user != null)
+          TextButton.icon(
+            onPressed: () => context.push(AppRoutes.accountDeletion),
+            icon: const Icon(Icons.person_remove_outlined),
+            label: const Text('Request account deletion'),
+          ),
       ],
     );
   }

@@ -9,9 +9,11 @@ class BirthDateField extends StatefulWidget {
     super.key,
     required this.controller,
     required this.enabled,
+    this.validator = validateBirthDate,
   });
   final TextEditingController controller;
   final bool enabled;
+  final String? Function(String?) validator;
   @override
   State<BirthDateField> createState() => _BirthDateFieldState();
 }
@@ -108,7 +110,7 @@ class _BirthDateFieldState extends State<BirthDateField> {
         maxLines: 2,
         enabled: widget.enabled,
         onTap: _pick,
-        validator: (_) => validateBirthDate(widget.controller.text),
+        validator: (_) => widget.validator(widget.controller.text),
         decoration: InputDecoration(
           hintText: 'Choose a date',
           prefixIcon: const Icon(Icons.calendar_month_outlined),

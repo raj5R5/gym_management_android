@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'brand_mark.dart';
+import 'soft_panel.dart';
+import 'titanium_surface.dart';
 
 class MessagePage extends StatelessWidget {
   const MessagePage({
@@ -25,18 +28,31 @@ class MessagePage extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 16),
-                Text(message),
-                for (final action in actions) ...[
-                  const SizedBox(height: 16),
-                  action,
-                ],
-              ],
+            child: TitaniumEntrance(
+              child: SoftPanel(
+                glass: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const BrandMark(size: 44),
+                    const SizedBox(height: 24),
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        title,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(message),
+                    for (final action in actions) ...[
+                      const SizedBox(height: 16),
+                      action,
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -44,7 +60,7 @@ class MessagePage extends StatelessWidget {
     );
     if (embedded) return body;
     return Scaffold(
-      appBar: AppBar(title: const Text('Gym Management')),
+      appBar: AppBar(title: const Text('MuscleDesk')),
       body: body,
     );
   }
