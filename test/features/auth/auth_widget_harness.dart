@@ -27,7 +27,10 @@ Future<ProviderContainer> pumpGym(
     container.dispose();
   });
   await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const GymApp()),
+    UncontrolledProviderScope(
+      container: container,
+      child: const GymApp(animateDecorations: false),
+    ),
   );
   await tester.pump();
   return container;

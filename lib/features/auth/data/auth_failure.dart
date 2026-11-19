@@ -15,8 +15,16 @@ enum AuthFailureKind {
 }
 
 class AuthFailure implements Exception {
-  const AuthFailure(this.kind);
+  const AuthFailure(
+    this.kind, {
+    this.statusCode,
+    this.transportType,
+    this.requestId,
+  });
   final AuthFailureKind kind;
+  final int? statusCode;
+  final DioExceptionType? transportType;
+  final String? requestId;
 
   String get message => switch (kind) {
     AuthFailureKind.invalidCredentials => 'Invalid email or password.',
@@ -40,33 +48,41 @@ class AuthFailure implements Exception {
   static AuthFailure fromDio(DioException error) {
     if (error.error case final AuthFailure failure) return failure;
     final data = error.response?.data;
+    final meta = data is Map ? data['meta'] : null;
+    final id = meta is Map ? meta['requestId'] : null;
+    AuthFailure failure(AuthFailureKind kind) => AuthFailure(
+      kind,
+      statusCode: error.response?.statusCode,
+      transportType: error.type,
+      requestId: id is String ? id : null,
+    );
     final code = data is Map && data['error'] is Map
         ? (data['error'] as Map)['code']
         : null;
     if (error.response?.statusCode == 401 && code == 'INVALID_CREDENTIALS') {
-      return const AuthFailure(AuthFailureKind.invalidCredentials);
+      return failure(AuthFailureKind.invalidCredentials);
     }
     if (error.response?.statusCode == 401 && code == 'INVALID_AUTHENTICATION') {
-      return const AuthFailure(AuthFailureKind.invalidSession);
+      return failure(AuthFailureKind.invalidSession);
     }
     final status = error.response?.statusCode;
-    if (status == 400) return const AuthFailure(AuthFailureKind.validation);
-    if (status == 403) return const AuthFailure(AuthFailureKind.forbidden);
-    if (status == 429) return const AuthFailure(AuthFailureKind.rateLimited);
+    if (status == 400) return failure(AuthFailureKind.validation);
+    if (status == 403) return failure(AuthFailureKind.forbidden);
+    if (status == 429) return failure(AuthFailureKind.rateLimited);
     if (status != null && status >= 500) {
-      return const AuthFailure(AuthFailureKind.server);
+      return failure(AuthFailureKind.server);
     }
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.sendTimeout ||
         error.type == DioExceptionType.receiveTimeout ||
         error.type == DioExceptionType.connectionError ||
         error.type == DioExceptionType.badCertificate) {
-      return const AuthFailure(AuthFailureKind.network);
+      return failure(AuthFailureKind.network);
     }
     if (error.error is StateError && error.response == null) {
-      return const AuthFailure(AuthFailureKind.configuration);
+      return failure(AuthFailureKind.configuration);
     }
-    return const AuthFailure(AuthFailureKind.unexpectedResponse);
+    return failure(AuthFailureKind.unexpectedResponse);
   }
 
   @override

@@ -25,6 +25,55 @@ void main() {
     isA<AuthFailure>().having((failure) => failure.kind, 'kind', value),
   );
 
+  for (final failureKind in [
+    AuthFailureKind.network,
+    AuthFailureKind.server,
+    AuthFailureKind.rateLimited,
+  ]) {
+    test(
+      'cold restoration after ${failureKind.name} at me uses saved rotation',
+      () async {
+        storage.value = syntheticCredential();
+        api.meFailure = AuthFailure(failureKind);
+        await expectLater(repository.restoreSession(), kind(failureKind));
+        expect(storage.clears, 0);
+        expect(repository.accessToken, isNull);
+        expect((repository.state as SessionError).canRetryRestoration, isTrue);
+        repository.dispose();
+        api.meFailure = null;
+        repository = AuthRepository(api: api, storage: storage);
+        await repository.restoreSession();
+        expect(
+          api.refreshedCredentials.last == api.rotatedTokens.refreshToken,
+          isTrue,
+        );
+        expect(repository.state, isA<SessionAuthenticated>());
+      },
+    );
+  }
+
+  test(
+    'logout after me outage revokes the staged rotation and blocks recovery',
+    () async {
+      storage.value = syntheticCredential();
+      api.meFailure = const AuthFailure(AuthFailureKind.server);
+      await expectLater(
+        repository.restoreSession(),
+        kind(AuthFailureKind.server),
+      );
+      await repository.logout();
+      expect(
+        api.loggedOutCredentials.single == api.rotatedTokens.refreshToken,
+        isTrue,
+      );
+      expect(storage.value, isNull);
+      expect(repository.accessToken, isNull);
+      await repository.restoreSession();
+      expect(repository.state, isA<SessionUnauthenticated>());
+      expect(api.refreshCalls, 1);
+    },
+  );
+
   test(
     'login publishes identity and persists only the refresh credential',
     () async {
@@ -64,6 +113,41 @@ void main() {
       expect(api.meCalls, 0);
     },
   );
+  for (final value in [
+    AuthFailureKind.network,
+    AuthFailureKind.server,
+    AuthFailureKind.rateLimited,
+  ]) {
+    test(
+      'restoration preserves credentials on ${value.name} failure',
+      () async {
+        final savedCredential = syntheticCredential();
+        storage.value = savedCredential;
+        api.refreshFailure = AuthFailure(value);
+
+        await expectLater(repository.restoreSession(), kind(value));
+
+        expect(storage.value, savedCredential);
+        expect(repository.accessToken, isNull);
+        expect(repository.state, isA<SessionError>());
+      },
+    );
+  }
+
+  test('restoration clears credentials when session is invalid', () async {
+    storage.value = syntheticCredential();
+    api.refreshFailure = const AuthFailure(AuthFailureKind.invalidSession);
+
+    await expectLater(
+      repository.restoreSession(),
+      kind(AuthFailureKind.invalidSession),
+    );
+
+    expect(storage.value, isNull);
+    expect(repository.accessToken, isNull);
+    expect(repository.state, isA<SessionError>());
+  });
+
   test('logout clears credentials and bearer immediately', () async {
     await login();
     final pending = repository.logout();
@@ -151,6 +235,8 @@ void main() {
     },
   );
   test('storage read failure is surfaced safely', () async {
+    final saved = syntheticCredential();
+    storage.value = saved;
     storage.failRead = true;
     await expectLater(
       repository.restoreSession(),
@@ -158,7 +244,35 @@ void main() {
     );
     expect(repository.state, isA<SessionError>());
     expect(api.refreshCalls, 0);
+    expect(storage.clears, 0);
+    expect(storage.value == saved, isTrue);
+    expect(repository.accessToken, isNull);
+    storage.failRead = false;
+    await repository.restoreSession();
+    expect(repository.state, isA<SessionAuthenticated>());
   });
+
+  test(
+    'restoration retry uses the rotation saved before a me outage',
+    () async {
+      await login();
+      api.meFailure = const AuthFailure(AuthFailureKind.network);
+      await expectLater(
+        repository.restoreSession(),
+        kind(AuthFailureKind.network),
+      );
+      expect(storage.value == api.rotatedTokens.refreshToken, isTrue);
+      expect(repository.accessToken, isNull);
+      api.meFailure = null;
+      expect(storage.clears, 1); // Only the original login cleanup.
+      await repository.restoreSession();
+      expect(
+        api.refreshedCredentials.last == api.rotatedTokens.refreshToken,
+        isTrue,
+      );
+      expect(repository.state, isA<SessionAuthenticated>());
+    },
+  );
   test(
     'failed storage deletion blocks restoration of an untrusted credential',
     () async {

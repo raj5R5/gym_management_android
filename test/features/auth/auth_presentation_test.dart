@@ -14,12 +14,84 @@ import 'auth_fakes.dart';
 import 'auth_widget_harness.dart';
 
 void main() {
+  testWidgets(
+    'recovery error keeps protected routes blocked and allows explicit sign-in',
+    (tester) async {
+      final api = FakeAuthApi()
+        ..meFailure = const AuthFailure(AuthFailureKind.server);
+      final storage = FakeCredentialStorage()..value = syntheticCredential();
+      final container = await pumpGym(tester, api: api, storage: storage);
+      await tester.pumpAndSettle();
+      final router = container.read(appRouterProvider);
+      router.go(AppRoutes.members);
+      await tester.pumpAndSettle();
+      expect(router.routeInformationProvider.value.uri.path, AppRoutes.startup);
+      expect(find.text('Could not restore your session'), findsOneWidget);
+      expect(find.text('Restoring your session…'), findsNothing);
+      expect(container.read(authRepositoryProvider).accessToken, isNull);
+      await tester.tap(find.text('Sign in instead'));
+      await tester.pumpAndSettle();
+      expect(router.routeInformationProvider.value.uri.path, AppRoutes.login);
+      expect(find.text('Login'), findsOneWidget);
+      expect(storage.value == api.rotatedTokens.refreshToken, isTrue);
+    },
+  );
+
+  testWidgets(
+    'storage restoration retry is usable on small screens with large text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final storage = FakeCredentialStorage()
+        ..value = syntheticCredential()
+        ..failRead = true;
+      final container = await pumpGym(tester, storage: storage);
+      await tester.pumpAndSettle();
+      expect(find.text('Could not restore your session'), findsOneWidget);
+      expect(storage.clears, 0);
+      expect(container.read(authRepositoryProvider).accessToken, isNull);
+      storage.failRead = false;
+      await tester.ensureVisible(find.text('Retry session restoration'));
+      await tester.tap(find.text('Retry session restoration'));
+      await tester.pumpAndSettle();
+      expect(find.text('You are signed in.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('temporary restoration failure offers retry without logging in', (
+    tester,
+  ) async {
+    final api = FakeAuthApi()
+      ..refreshFailure = const AuthFailure(AuthFailureKind.network);
+    final storage = FakeCredentialStorage()..value = syntheticCredential();
+    final saved = storage.value;
+    final container = await pumpGym(tester, api: api, storage: storage);
+    await tester.pumpAndSettle();
+    expect(find.text('Retry session restoration'), findsOneWidget);
+    expect(find.text('Restoring your session…'), findsNothing);
+    expect(find.text('Login'), findsNothing);
+    expect(find.text('You are signed in.'), findsNothing);
+    expect(container.read(authRepositoryProvider).accessToken, isNull);
+    expect(storage.value == saved, isTrue);
+    api.refreshFailure = null;
+    await tester.tap(find.text('Retry session restoration'));
+    await tester.pumpAndSettle();
+    expect(find.text('You are signed in.'), findsOneWidget);
+    expect(api.loginCalls, 0);
+    expect(api.refreshCalls, 2);
+  });
+
   testWidgets('login renders labelled email and obscured password fields', (
     tester,
   ) async {
     await pumpGym(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Gym Management'), findsOneWidget);
+    expect(find.text('MuscleDesk'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(

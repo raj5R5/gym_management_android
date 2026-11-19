@@ -26,6 +26,7 @@ class SessionAuthenticated extends SessionState {
 }
 
 class SessionError extends SessionState {
-  const SessionError(this.failure);
+  const SessionError(this.failure, {this.canRetryRestoration = false});
   final AuthFailure failure;
+  final bool canRetryRestoration;
 }

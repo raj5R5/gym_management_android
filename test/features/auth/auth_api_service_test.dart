@@ -4,6 +4,7 @@ import 'package:gym_management_app/core/config/app_config.dart';
 import 'package:gym_management_app/core/network/api_client.dart';
 import 'package:gym_management_app/features/auth/data/auth_api_service.dart';
 import 'package:gym_management_app/features/auth/data/auth_failure.dart';
+import 'package:gym_management_app/features/auth/data/auth_diagnostics.dart';
 
 import 'auth_fakes.dart';
 
@@ -17,6 +18,65 @@ void main() {
     api = DioAuthApiService(client);
   });
   tearDown(() => client.close(force: true));
+
+  test(
+    'refresh diagnostics retain failure stage and HTTP metadata, not payloads',
+    () async {
+      final lines = <String>[];
+      api = DioAuthApiService(
+        client,
+        diagnostics: AuthDiagnostics(sink: lines.add),
+      );
+      final credential = syntheticCredential();
+      const id = 'a4eb1081-e162-4f8a-9cb1-91d918503315';
+      client.httpClientAdapter = CallbackAdapter(
+        (_) => jsonResponse({
+          'success': false,
+          'error': {'code': 'INTERNAL_SERVER_ERROR', 'message': credential},
+          'meta': {'requestId': id},
+        }, status: 503),
+      );
+      await expectLater(
+        api.refresh(credential),
+        throwsA(
+          isA<AuthFailure>()
+              .having((e) => e.kind, 'kind', AuthFailureKind.server)
+              .having((e) => e.statusCode, 'statusCode', 503)
+              .having((e) => e.requestId, 'requestId', id),
+        ),
+      );
+      expect(
+        lines.last,
+        contains('stage=refreshApi event=failed category=server http=503'),
+      );
+      expect(lines.join().contains(credential), isFalse);
+    },
+  );
+
+  test(
+    'malformed successful me response is distinguishable from invalid auth',
+    () async {
+      final lines = <String>[];
+      api = DioAuthApiService(
+        client,
+        diagnostics: AuthDiagnostics(sink: lines.add),
+      );
+      final token = syntheticCredential();
+      client.httpClientAdapter = CallbackAdapter(
+        (_) => jsonResponse(success({})),
+      );
+      await expectLater(
+        api.currentUser(token),
+        throwsA(
+          isA<AuthFailure>()
+              .having((e) => e.kind, 'kind', AuthFailureKind.unexpectedResponse)
+              .having((e) => e.statusCode, 'statusCode', 200),
+        ),
+      );
+      expect(lines.last, contains('stage=currentUserApi event=failed'));
+      expect(lines.join().contains(token), isFalse);
+    },
+  );
 
   test(
     'mobile login and refresh use exact contracts without stale headers',

@@ -4,6 +4,7 @@ import '../../../core/storage/credential_storage.dart';
 import '../models/auth_models.dart';
 import '../models/session_state.dart';
 import 'auth_api_service.dart';
+import 'auth_diagnostics.dart';
 import 'auth_failure.dart';
 import 'auth_operation_queue.dart';
 
@@ -13,13 +14,16 @@ class AuthRepository {
     required AuthApiService api,
     required CredentialStorage storage,
     AuthOperationQueue? operationQueue,
+    AuthDiagnostics diagnostics = const AuthDiagnostics(),
   }) : _api = api,
        _storage = storage,
-       _queue = operationQueue ?? AuthOperationQueue();
+       _queue = operationQueue ?? AuthOperationQueue(),
+       _diagnostics = diagnostics;
 
   final AuthApiService _api;
   final CredentialStorage _storage;
   final AuthOperationQueue _queue;
+  final AuthDiagnostics _diagnostics;
   final _changes = StreamController<SessionState>.broadcast(sync: true);
   SessionState _state = const SessionInitial();
   AuthTokens? _tokens;
@@ -74,12 +78,19 @@ class AuthRepository {
     _stagedTokens = null;
     _blocked = true;
     try {
+      _diagnostics.record(AuthStage.credentialClear, AuthEvent.started);
       await _storage.clearRefreshCredential();
       _checkAlive();
       _storageUnsafe = false;
+      _diagnostics.record(AuthStage.credentialClear, AuthEvent.succeeded);
     } catch (_) {
       _checkAlive();
       _storageUnsafe = true;
+      _diagnostics.record(
+        AuthStage.credentialClear,
+        AuthEvent.failed,
+        failure: const AuthFailure(AuthFailureKind.storage),
+      );
       throw const AuthFailure(AuthFailureKind.storage);
     }
   }
@@ -104,11 +115,18 @@ class AuthRepository {
     _stagedTokens = tokens;
     _checkRevision(revision);
     try {
+      _diagnostics.record(AuthStage.credentialWrite, AuthEvent.started);
       await _storage.writeRefreshCredential(tokens.refreshToken);
       _checkRevision(revision);
+      _diagnostics.record(AuthStage.credentialWrite, AuthEvent.succeeded);
     } catch (_) {
       _checkRevision(revision);
       _storageUnsafe = true;
+      _diagnostics.record(
+        AuthStage.credentialWrite,
+        AuthEvent.failed,
+        failure: const AuthFailure(AuthFailureKind.storage),
+      );
       throw const AuthFailure(AuthFailureKind.storage);
     }
   }
@@ -152,6 +170,10 @@ class AuthRepository {
     flight =
         _ordered(() async {
           _checkRevision(revision);
+          final operation = restoring ? AuthStage.restore : AuthStage.refresh;
+          var stage = operation;
+          final watch = Stopwatch()..start();
+          _diagnostics.record(operation, AuthEvent.started);
           _blocked = true;
           _emit(
             SessionLoading(
@@ -164,12 +186,19 @@ class AuthRepository {
             if (_storageUnsafe) {
               throw const AuthFailure(AuthFailureKind.storage);
             }
+            stage = AuthStage.credentialRead;
+            _diagnostics.record(stage, AuthEvent.started);
             final credential =
-                _tokens?.refreshToken ?? await _storage.readRefreshCredential();
+                _stagedTokens?.refreshToken ??
+                _tokens?.refreshToken ??
+                await _storage.readRefreshCredential();
+            _checkRevision(revision);
+            _diagnostics.record(stage, AuthEvent.succeeded);
             if (credential == null) {
               _checkRevision(revision);
               _blocked = true;
               _emit(const SessionUnauthenticated());
+              _diagnostics.record(operation, AuthEvent.absent);
               if (!restoring) {
                 throw const AuthFailure(AuthFailureKind.invalidSession);
               }
@@ -179,14 +208,54 @@ class AuthRepository {
               throw const AuthFailure(AuthFailureKind.invalidSession);
             }
             _checkRevision(revision);
+            stage = AuthStage.refreshApi;
             final tokens = await _api.refresh(credential);
+            stage = AuthStage.credentialWrite;
             await _stage(tokens, revision);
             _checkRevision(revision);
+            stage = AuthStage.currentUserApi;
             final identity = await _api.currentUser(tokens.accessToken);
             _checkRevision(revision);
             _commit(tokens, identity, revision);
+            _diagnostics.record(
+              operation,
+              AuthEvent.succeeded,
+              elapsedMs: watch.elapsedMilliseconds,
+            );
           } catch (error) {
-            if (revision != _revision || _disposed) throw _failure(error);
+            if (revision != _revision || _disposed) {
+              _diagnostics.record(operation, AuthEvent.superseded);
+              throw _failure(error);
+            }
+
+            final failure = _failure(error);
+            _diagnostics.record(
+              stage,
+              AuthEvent.failed,
+              failure: failure,
+              elapsedMs: watch.elapsedMilliseconds,
+            );
+            final preserveCredential =
+                restoring &&
+                (failure.kind == AuthFailureKind.network ||
+                    failure.kind == AuthFailureKind.server ||
+                    failure.kind == AuthFailureKind.rateLimited ||
+                    (stage == AuthStage.credentialRead &&
+                        failure.kind == AuthFailureKind.storage));
+
+            if (preserveCredential) {
+              _checkRevision(revision);
+              _blocked = true;
+              _diagnostics.record(
+                operation,
+                AuthEvent.preserved,
+                failure: failure,
+                elapsedMs: watch.elapsedMilliseconds,
+              );
+              _emit(SessionError(failure, canRetryRestoration: true));
+              throw failure;
+            }
+
             throw await _fail(error, revision);
           }
         }).whenComplete(() {

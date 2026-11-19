@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+import 'package:gym_management_app/features/owner_profile/owner_signup_photo.dart';
+import '../members/photo_test_support.dart' show photoBytes;
+import 'package:gym_management_app/shared/widgets/ambient_motion.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +19,16 @@ import 'package:gym_management_app/features/auth/providers/session_controller.da
 import 'package:gym_management_app/features/auth/providers/owner_registration_providers.dart';
 import 'package:gym_management_app/features/auth/presentation/owner_signup_page.dart';
 import 'auth_fakes.dart';
+
+class FailingPhotoHandoff extends OwnerSignupPhotoStore {
+  @override
+  Future<void> recover() async {}
+  @override
+  Future<Uint8List?> preview() async => photoBytes;
+  @override
+  Future<void> confirmRegistration(String email) async =>
+      throw StateError('local photo storage unavailable');
+}
 
 class FakeRegistration implements OwnerRegistrationRepository {
   int calls = 0;
@@ -46,6 +60,14 @@ Future<void> enter(WidgetTester tester, {String? password}) async {
   }.entries) {
     await tester.enterText(field(item.key), item.value);
   }
+  final adultConfirmation = find.byKey(
+    const ValueKey('adultAccountConfirmation'),
+  );
+  if (!tester.widget<CheckboxListTile>(adultConfirmation).value!) {
+    await tester.ensureVisible(adultConfirmation);
+    await tester.tap(adultConfirmation);
+  }
+  await tester.pump();
 }
 
 Future<void> submit(WidgetTester tester) async {
@@ -60,10 +82,13 @@ Future<ProviderContainer> pump(
   FakeAuthApi? api,
   FakeCredentialStorage? storage,
   bool signup = true,
+  OwnerSignupPhotoStore? photos,
 }) async {
   final container = ProviderContainer(
     overrides: [
       ownerRegistrationRepositoryProvider.overrideWithValue(repository),
+      if (photos != null)
+        ownerSignupPhotoStoreProvider.overrideWithValue(photos),
       authApiServiceProvider.overrideWithValue(api ?? FakeAuthApi()),
       credentialStorageProvider.overrideWithValue(
         storage ?? FakeCredentialStorage(),
@@ -75,7 +100,10 @@ Future<ProviderContainer> pump(
     container.dispose();
   });
   await tester.pumpWidget(
-    UncontrolledProviderScope(container: container, child: const GymApp()),
+    UncontrolledProviderScope(
+      container: container,
+      child: const GymApp(animateDecorations: false),
+    ),
   );
   await tester.pumpAndSettle();
   if (signup) {
@@ -86,6 +114,54 @@ Future<ProviderContainer> pump(
 }
 
 void main() {
+  testWidgets(
+    'adult account declaration is required without submitting registration',
+    (tester) async {
+      final repository = FakeRegistration();
+      await pump(tester, repository);
+      await enter(tester);
+      final confirmation = find.byKey(
+        const ValueKey('adultAccountConfirmation'),
+      );
+      await tester.ensureVisible(confirmation);
+      await tester.tap(confirmation);
+      await submit(tester);
+      expect(repository.calls, 0);
+      expect(
+        find.text(
+          'Confirm that you are at least 18 to create an owner account.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+  testWidgets(
+    'optional photo handoff failure preserves confirmed account success without resubmitting',
+    (tester) async {
+      final repository = FakeRegistration();
+      final container = await pump(
+        tester,
+        repository,
+        photos: FailingPhotoHandoff(),
+      );
+      await enter(tester);
+      await submit(tester);
+      await tester.pumpAndSettle();
+      expect(repository.calls, 1);
+      expect(container.read(appRouterProvider).state.uri.path, AppRoutes.login);
+      expect(
+        find.text(
+          'Account created. The optional photo could not be prepared. Add it from Edit owner profile after signing in.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        container.read(sessionControllerProvider),
+        isNot(isA<SessionAuthenticated>()),
+      );
+    },
+  );
+
   testWidgets('Login Sign Up link opens public form before authentication', (
     tester,
   ) async {
@@ -307,7 +383,10 @@ void main() {
           ],
           child: MaterialApp(
             theme: AppTheme.light,
-            home: const OwnerSignupPage(),
+            home: const AmbientMotionSettings(
+              enabled: false,
+              child: OwnerSignupPage(),
+            ),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
                 context,

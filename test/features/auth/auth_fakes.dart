@@ -109,6 +109,7 @@ class FakeAuthApi implements AuthApiService {
   int loginCalls = 0;
   int refreshCalls = 0;
   int meCalls = 0;
+  final refreshedCredentials = <String>[];
   final loggedOutCredentials = <String>[];
   @override
   Future<LoginResponse> login({
@@ -127,6 +128,7 @@ class FakeAuthApi implements AuthApiService {
   @override
   Future<AuthTokens> refresh(String refreshCredential) async {
     refreshCalls++;
+    refreshedCredentials.add(refreshCredential);
     if (!refreshEntered.isCompleted) refreshEntered.complete();
     if (refreshGate != null) await refreshGate!.future;
     if (refreshFailure != null) throw refreshFailure!;
