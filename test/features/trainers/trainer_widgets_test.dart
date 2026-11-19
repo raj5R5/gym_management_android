@@ -46,7 +46,10 @@ void main() {
       container.dispose();
     });
     await tester.pumpWidget(
-      UncontrolledProviderScope(container: container, child: const GymApp()),
+      UncontrolledProviderScope(
+        container: container,
+        child: const GymApp(animateDecorations: false),
+      ),
     );
     await tester.pumpAndSettle();
     container.read(appRouterProvider).go(AppRoutes.trainers);
@@ -182,9 +185,12 @@ void main() {
     await tester.tap(find.text('Pat Lee'));
     await tester.pumpAndSettle();
     expect(find.text('Trainer details'), findsOneWidget);
-    expect(find.text('Date of birth: 1995-06-12'), findsOneWidget);
+    expect(find.text('Date of birth: Jun 12, 1995'), findsOneWidget);
     expect(find.text('Strength, Mobility'), findsOneWidget);
-    expect(find.text('Branch ID: 000000000000000000000099'), findsOneWidget);
+    await reveal(tester, find.text('Record details'));
+    await tester.tap(find.text('Record details'));
+    await tester.pumpAndSettle();
+    expect(find.text('Branch ID: 000000000000000000000099'), findsNothing);
     expect(repository.operations.single, 'get:$gymA:$trainerId');
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -282,7 +288,10 @@ void main() {
       expect(repository.writes.single['address'], isNull);
       expect(repository.writes.single['specializations'], isNull);
       expect(repository.writes.single.containsKey('branchId'), isFalse);
-      expect(find.text('Branch ID: 000000000000000000000099'), findsOneWidget);
+      await reveal(tester, find.text('Record details'));
+      await tester.tap(find.text('Record details'));
+      await tester.pumpAndSettle();
+      expect(find.text('Branch ID: 000000000000000000000099'), findsNothing);
       expect(find.text('No specializations provided.'), findsOneWidget);
       expect(find.text('Date of birth: 1995-06-12'), findsNothing);
     },
@@ -454,6 +463,15 @@ void main() {
       await tester.tap(find.text('Pat Lee'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Admin navigation'));
+      await tester.pumpAndSettle();
+      // The drawer lists more pages than fit the test screen.
+      await tester.dragUntilVisible(
+        find.widgetWithText(ListTile, 'More'),
+        find.byType(Drawer),
+        const Offset(0, -200),
+      );
+      // Bring it fully on screen: a tile at the very edge misses the tap.
+      await tester.drag(find.byType(Drawer), const Offset(0, -400));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(ListTile, 'More'));
       await tester.pumpAndSettle();

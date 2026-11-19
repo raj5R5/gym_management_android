@@ -1,3 +1,4 @@
+import '../../../shared/widgets/field_icon.dart';
 import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -103,7 +104,7 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
       key: ValueKey(key),
       controller: _fields[key],
       enabled: !ref.watch(trainerMutationProvider(widget.scope)).isLoading,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(labelText: label, prefixIcon: FieldIcon(key)),
       validator: validator,
       maxLength: maxLength,
       keyboardType: keyboard,
@@ -231,9 +232,13 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
                 keyboard: TextInputType.phone,
               ),
               DropdownButtonFormField<TrainerStatus>(
+                itemHeight: null,
                 isExpanded: true,
                 initialValue: _status,
-                decoration: const InputDecoration(labelText: 'Status'),
+                decoration: const InputDecoration(
+                  prefixIcon: FieldIcon('status'),
+                  labelText: 'Status',
+                ),
                 items: TrainerStatus.values
                     .map(
                       (status) => DropdownMenuItem(
@@ -251,11 +256,6 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
                 const Text(
                   'This creates a trainer profile only. Login access and member assignments are managed separately.',
                 ),
-              Text(
-                _editing
-                    ? 'Branch assignment is preserved. Branch selection is currently unavailable.'
-                    : 'Branch selection is unavailable. This trainer will be created without a branch assignment.',
-              ),
               const SizedBox(height: 16),
               Text(
                 'Optional profile information',
@@ -270,9 +270,13 @@ class _TrainerFormState extends ConsumerState<_TrainerForm> {
                 keyboard: TextInputType.datetime,
               ),
               DropdownButtonFormField<String?>(
+                itemHeight: null,
                 isExpanded: true,
                 initialValue: _gender,
-                decoration: const InputDecoration(labelText: 'Gender'),
+                decoration: const InputDecoration(
+                  prefixIcon: FieldIcon('gender'),
+                  labelText: 'Gender',
+                ),
                 items: [
                   const DropdownMenuItem(
                     value: null,

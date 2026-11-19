@@ -1,4 +1,7 @@
+import '../../../shared/formatting/payment_date.dart';
+import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
+import 'trainer_app_access.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
@@ -69,20 +72,39 @@ class TrainerDetailsPage extends ConsumerWidget {
               title: trainer.name,
               icon: Icons.fitness_center_outlined,
               children: [
-                Text('Trainer code: ${trainer.trainerCode}'),
-                Text('Phone: ${trainer.phone}'),
-                Text('Status: ${trainer.status.name}'),
-                Text(
-                  trainer.branchId == null
-                      ? 'No branch assigned'
-                      : 'Branch ID: ${trainer.branchId}',
+                IconLabel(
+                  'Trainer code: ${trainer.trainerCode}',
+                  icon: Icons.badge_outlined,
                 ),
+                IconLabel(
+                  'Phone: ${trainer.phone}',
+                  icon: Icons.phone_outlined,
+                ),
+                IconLabel(
+                  'Status: ${trainer.status.name}',
+                  icon: Icons.verified_user_outlined,
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => context.push(trainerPath(scope, edit: true)),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit trainer'),
+                ),
+                const SizedBox(height: 12),
                 if (trainer.dateOfBirth != null)
-                  Text('Date of birth: ${trainer.dateOfBirth}'),
+                  IconLabel(
+                    'Date of birth: ${MaterialLocalizations.of(context).formatShortDate(trainer.dateOfBirth!.value)}',
+                    icon: Icons.cake_outlined,
+                  ),
                 if (trainer.gender != null)
-                  Text('Gender: ${trainer.gender!.replaceAll('_', ' ')}'),
+                  IconLabel(
+                    'Gender: ${trainer.gender!.replaceAll('_', ' ')}',
+                    icon: Icons.person_outline,
+                  ),
                 if (trainer.address != null)
-                  Text('Address: ${trainer.address!.display}'),
+                  IconLabel(
+                    'Address: ${trainer.address!.display}',
+                    icon: Icons.location_on_outlined,
+                  ),
                 const SizedBox(height: 12),
                 Text(
                   'Specializations',
@@ -93,22 +115,34 @@ class TrainerDetailsPage extends ConsumerWidget {
                       ? 'No specializations provided.'
                       : trainer.specializations!.join(', '),
                 ),
-                if (trainer.createdAt != null)
-                  Text(
-                    'Created: ${trainer.createdAt!.toUtc().toIso8601String()} (UTC)',
-                  ),
-                if (trainer.updatedAt != null)
-                  Text(
-                    'Updated: ${trainer.updatedAt!.toUtc().toIso8601String()} (UTC)',
-                  ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => context.push(trainerPath(scope, edit: true)),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit trainer'),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.info_outline, size: 20),
+                  title: const Text('Record details'),
+                  children: [
+                    if (trainer.createdAt != null)
+                      IconLabel(
+                        'Created: ${formatPaymentDateTime(MaterialLocalizations.of(context), trainer.createdAt!, timezone: 'UTC')}',
+                        icon: Icons.event_available_outlined,
+                      ),
+                    if (trainer.updatedAt != null)
+                      IconLabel(
+                        'Updated: ${formatPaymentDateTime(MaterialLocalizations.of(context), trainer.updatedAt!, timezone: 'UTC')}',
+                        icon: Icons.update,
+                      ),
+                  ],
                 ),
+                const SizedBox(height: 12),
               ],
             ),
+          if (trainer != null && !state.isLoading && !state.hasError) ...[
+            const SizedBox(height: 12),
+            TrainerAppAccessCard(
+              gymId: scope.gymId,
+              trainer: trainer,
+              onGranted: refresh,
+            ),
+          ],
         ],
       ),
     );

@@ -13,7 +13,7 @@ void main() {
     expect(profile.name, 'Pat Lee');
     expect(profile.trainerCode, 'TR01');
     expect(profile.status, TrainerStatus.active);
-    expect(profile.branchId, isNull);
+
     expect(profile.address, isNull);
     expect(profile.specializations, isNull);
     expect(profile.dateOfBirth, isNull);
@@ -43,7 +43,6 @@ void main() {
       expect(profile.specializations, ['Strength', 'Mobility']);
       expect(profile.createdAt!.isUtc, isTrue);
       expect(profile.updatedAt!.day, 2);
-      expect(profile.branchId, '000000000000000000000099');
     },
   );
   test('server list pagination and empty results', () {

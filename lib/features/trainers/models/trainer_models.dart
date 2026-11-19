@@ -21,13 +21,13 @@ class TrainerProfile {
       lastName = text(json, 'lastName'),
       phone = text(json, 'phone'),
       status = TrainerStatus.values.byName(text(json, 'status')),
-      branchId = optionalText(json, 'branchId'),
       gender = optionalText(json, 'gender'),
       dateOfBirth = json['dateOfBirth'] == null
           ? null
           : CalendarDate.parse(text(json, 'dateOfBirth')),
       address = optionalObject(json['address'], ProfileAddress.fromJson),
       specializations = parseSpecializations(json['specializations']),
+      hasAppAccess = json['userId'] is String,
       createdAt = json['createdAt'] == null
           ? null
           : DateTime.parse(text(json, 'createdAt')),
@@ -36,13 +36,14 @@ class TrainerProfile {
           : DateTime.parse(text(json, 'updatedAt'));
   final String id, gymId, trainerCode, firstName, lastName, phone;
   final TrainerStatus status;
-  final String? branchId, gender;
+  final String? gender;
   final CalendarDate? dateOfBirth;
   final ProfileAddress? address;
   final List<String>? specializations;
   final DateTime? createdAt, updatedAt;
-  // userId is intentionally not retained or displayed; account provisioning is
-  // outside M29 and the DTO supplies no useful account display information.
+
+  /// Whether a login is linked; the account id itself is not retained.
+  final bool hasAppAccess;
   String get name => '$firstName $lastName';
 }
 

@@ -1,3 +1,4 @@
+import '../../../shared/widgets/field_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../models/trainer_models.dart';
 import '../providers/trainer_providers.dart';
 import 'trainer_components.dart';
 import '../../../shared/widgets/page_controls.dart';
+import '../../../shared/widgets/card_reveal.dart';
 
 class TrainersPageView extends ConsumerWidget {
   const TrainersPageView({super.key});
@@ -100,6 +102,7 @@ class _TrainersListState extends ConsumerState<_TrainersList> {
             decoration: InputDecoration(
               labelText: 'Search trainers',
               hintText: 'Code, name, phone or specialization',
+              counterText: '',
               suffixIcon: IconButton(
                 tooltip: 'Search',
                 onPressed: () => _apply(query.status),
@@ -115,10 +118,14 @@ class _TrainersListState extends ConsumerState<_TrainersList> {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<TrainerStatus?>(
+            itemHeight: null,
             isExpanded: true,
             key: ValueKey(query.status),
             initialValue: query.status,
-            decoration: const InputDecoration(labelText: 'Trainer status'),
+            decoration: const InputDecoration(
+              prefixIcon: FieldIcon('status'),
+              labelText: 'Trainer status',
+            ),
             items: [
               const DropdownMenuItem(value: null, child: Text('All statuses')),
               ...TrainerStatus.values.map(
@@ -152,25 +159,28 @@ class _TrainersListState extends ConsumerState<_TrainersList> {
             ...result.trainers.map(
               (trainer) => Card(
                 margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.secondaryContainer,
-                    foregroundColor: Theme.of(
-                      context,
-                    ).colorScheme.onSecondaryContainer,
-                    child: Text(
-                      trainer.firstName.characters.first.toUpperCase(),
+                child: Builder(
+                  builder: (tileContext) => ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.secondaryContainer,
+                      foregroundColor: Theme.of(
+                        context,
+                      ).colorScheme.onSecondaryContainer,
+                      child: Text(
+                        trainer.firstName.characters.first.toUpperCase(),
+                      ),
                     ),
-                  ),
-                  title: Text(trainer.name),
-                  subtitle: Text(
-                    '${trainer.trainerCode} · ${trainer.phone}\n${trainer.status.name}${trainer.branchId == null ? ' · No branch assigned' : ' · Branch: ${trainer.branchId}'}${(trainer.specializations ?? []).isEmpty ? '' : '\n${trainer.specializations!.join(', ')}'}',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push(
-                    trainerPath(scopeFor(widget.gym, trainer.id)),
+                    title: Text(trainer.name),
+                    subtitle: Text(
+                      '${trainer.trainerCode} · ${trainer.phone}\n${trainer.status.name}${(trainer.specializations ?? []).isEmpty ? '' : '\n${trainer.specializations!.join(', ')}'}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => pushFromCard(
+                      tileContext,
+                      trainerPath(scopeFor(widget.gym, trainer.id)),
+                    ),
                   ),
                 ),
               ),
