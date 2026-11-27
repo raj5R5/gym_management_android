@@ -190,6 +190,14 @@ void main() {
   }
 
   Finder currentCard() => find.byType(MemberCurrentMembershipCard);
+
+  /// Membership history starts collapsed, like the other secondary sections.
+  Future<void> openHistory(WidgetTester tester) async {
+    await reveal(tester, find.text('Membership history'));
+    await tester.tap(find.text('Membership history'));
+    await tester.pumpAndSettle();
+  }
+
   Finder financeCard() => find.byType(MemberPaymentSummaryCard);
   setUp(() => members = DetailsFake());
 
@@ -258,17 +266,19 @@ void main() {
                   .childrenDelegate
               as SliverChildListDelegate;
       final types = rows.children.map((widget) => widget.runtimeType).toList();
-      expect(
-        types.indexOf(MemberProfileCard),
-        lessThan(types.indexOf(MemberCurrentMembershipCard)),
+      final moneyCard = rows.children.indexWhere(
+        (widget) => widget.key == const ValueKey('member-money-card'),
       );
+      expect(types.indexOf(MemberProfileCard), lessThan(moneyCard));
+      expect(moneyCard, lessThan(types.indexOf(MemberPaymentsSection)));
       expect(
-        types.indexOf(MemberCurrentMembershipCard),
-        lessThan(types.indexOf(MemberPaymentSummaryCard)),
-      );
-      expect(
-        types.indexOf(MemberPaymentSummaryCard),
+        types.indexOf(MemberPaymentsSection),
         lessThan(types.indexOf(MemberPersonalDetails)),
+      );
+      // Plan first, then what is owed, inside the one card.
+      expect(
+        tester.getTopLeft(currentCard()).dy,
+        lessThan(tester.getTopLeft(financeCard()).dy),
       );
       await reveal(tester, find.text('Contact & personal details'));
       expect(find.text('Phone'), findsNothing);
@@ -284,7 +294,7 @@ void main() {
       members.debts[memberId] = [debtJson(status: 'expired')];
       await mount(tester);
       await reveal(tester, find.text('Membership expired'));
-      expect(find.text('No current membership.'), findsOneWidget);
+      expect(find.text('No current membership'), findsOneWidget);
       await reveal(tester, find.text('Pay Now'));
       expect(
         find.descendant(of: financeCard(), matching: find.text('₹500.00')),
@@ -302,15 +312,15 @@ void main() {
     members.debts[memberId] = [debtJson(balance: 0)];
     await mount(tester);
     expect(find.text('Suspended'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    expect(
+      tester.widget<MemberStatusBadge>(find.byType(MemberStatusBadge)).status,
+      MemberStatus.suspended,
+    );
     await reveal(tester, find.text('Fully Paid'));
     expect(find.text('Membership: Active'), findsOneWidget);
     await reveal(tester, find.text('Current outstanding'));
     expect(find.text('Pay Now'), findsNothing);
-    expect(
-      find.text('No outstanding dues across non-cancelled memberships.'),
-      findsOneWidget,
-    );
+    expect(find.text('No outstanding dues.'), findsOneWidget);
   });
 
   testWidgets('paid current plan does not hide debt from an expired plan', (
@@ -324,7 +334,7 @@ void main() {
     await mount(tester);
     await reveal(tester, find.text('Fully Paid'));
     expect(
-      find.descendant(of: currentCard(), matching: find.text('₹0.00')),
+      find.descendant(of: currentCard(), matching: find.text('Fully Paid')),
       findsOneWidget,
     );
     await reveal(tester, find.text('Pay Now'));
@@ -405,131 +415,124 @@ void main() {
       expect(find.textContaining(gymB), findsNothing);
     },
   );
-  testWidgets(
-    'current membership presents saved price/dates and balances without a fake progress bar',
-    (tester) async {
-      await mount(tester);
-      await reveal(tester, find.text('Current membership'));
-      final card = currentCard();
-      expect(
-        find.descendant(of: card, matching: find.text('Monthly')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: card,
-          matching: find.text('Saved plan price: ₹1,500.00'),
+  testWidgets('current membership shows the plan, its dates and what is paid', (
+    tester,
+  ) async {
+    await mount(tester);
+    await reveal(tester, find.text('Current membership'));
+    final card = currentCard();
+    expect(
+      find.descendant(of: card, matching: find.text('Monthly')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('1 Mar 2026 –')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('31 Mar 2026')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.text('₹1,000.00 paid of ₹1,500.00'),
+      ),
+      findsOneWidget,
+    );
+    // The plan's dates are past, so no time left or progress is invented.
+    expect(find.textContaining('days left'), findsNothing);
+    expect(
+      find.descendant(of: card, matching: find.byType(LinearProgressIndicator)),
+      findsNothing,
+    );
+    // What is owed is shown once, beside the collection action.
+    expect(
+      find.descendant(of: financeCard(), matching: find.text('₹500.00')),
+      findsOneWidget,
+    );
+    expect(find.text('Purchase membership'), findsNothing);
+    await reveal(tester, find.text('Membership & payments'));
+    await tester.tap(find.text('Membership & payments'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MembershipPage), findsOneWidget);
+    expect(
+      tester.widget<MembershipPage>(find.byType(MembershipPage)).memberId,
+      memberId,
+    );
+  });
+  testWidgets('a running plan shows the days left and the time used', (
+    tester,
+  ) async {
+    // 1–31 Mar (end exclusive); on 21 Mar ten days remain of thirty.
+    final membership = Membership.fromJson(debtJson());
+    Future<void> show(DateTime today) => tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: Scaffold(
+          body: MembershipAtAGlance(membership: membership, today: today),
         ),
+      ),
+    );
+    await show(DateTime(2026, 3, 21));
+    expect(find.text('10 days left'), findsOneWidget);
+    final bar = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(bar.value, closeTo(20 / 30, .001));
+
+    await show(DateTime(2026, 2, 20));
+    expect(find.text('Starts in 9 days'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+  testWidgets('current membership uses the saved subscription snapshot', (
+    tester,
+  ) async {
+    members.debts[memberId] = [
+      debtJson()..addAll({
+        'planNameSnapshot': 'Monthly legacy offer',
+        'durationDaysSnapshot': 95,
+        'startDate': '2026-01-01',
+        'endDate': '2026-04-06',
+      }),
+    ];
+    await mount(tester);
+    await reveal(tester, find.text('Current membership'));
+    for (final value in [
+      'Monthly legacy offer',
+      '1 Jan 2026 –',
+      '6 Apr 2026',
+      '₹1,000.00 paid of ₹1,500.00',
+    ]) {
+      expect(
+        find.descendant(of: currentCard(), matching: find.text(value)),
         findsOneWidget,
+        reason: value,
       );
-      for (final label in [
-        '≈1',
-        'Months (approx.)',
-        '30',
-        'Total days',
-        'Membership dates · gym timezone',
-      ]) {
-        expect(
-          find.descendant(of: card, matching: find.text(label)),
-          findsOneWidget,
-        );
-      }
-      await reveal(tester, find.byTooltip('Explain duration for Monthly'));
-      await tester.tap(find.byTooltip('Explain duration for Monthly'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('lasts exactly 30 days'), findsOneWidget);
-      expect(
-        find.textContaining('It does not mean calendar months.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Got it'));
-      await tester.pumpAndSettle();
-      expect(
-        find.descendant(of: card, matching: find.text('1 Mar 2026 –')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: card, matching: find.text('31 Mar 2026')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: card, matching: find.text('₹1,000.00')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(of: card, matching: find.text('₹500.00')),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: card,
-          matching: find.byType(LinearProgressIndicator),
-        ),
-        findsNothing,
-      );
-      expect(find.text('Purchase membership'), findsNothing);
-      await reveal(tester, find.text('Membership & payments'));
-      await tester.tap(find.text('Membership & payments'));
-      await tester.pumpAndSettle();
-      expect(find.byType(MembershipPage), findsOneWidget);
-      expect(
-        tester.widget<MembershipPage>(find.byType(MembershipPage)).memberId,
-        memberId,
-      );
-    },
-  );
-  testWidgets(
-    'current duration uses the saved subscription snapshot rather than the plan name or remaining time',
-    (tester) async {
-      members.debts[memberId] = [
-        debtJson()..addAll({
-          'planNameSnapshot': 'Monthly legacy offer',
-          'durationDaysSnapshot': 95,
-          'startDate': '2026-01-01',
-          'endDate': '2026-04-06',
-        }),
-      ];
-      await mount(tester);
-      await reveal(tester, find.text('Current membership'));
-      for (final value in ['≈3.17', '95', 'Saved plan price: ₹1,500.00']) {
-        expect(
-          find.descendant(of: currentCard(), matching: find.text(value)),
-          findsOneWidget,
-        );
-      }
-      await reveal(
-        tester,
-        find.byTooltip('Explain duration for Monthly legacy offer'),
-      );
-      await tester.tap(
-        find.byTooltip('Explain duration for Monthly legacy offer'),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('lasts exactly 95 days'), findsOneWidget);
-      expect(members.writes, isEmpty);
-      expect(payments.collections, isEmpty);
-    },
-  );
+    }
+    expect(members.writes, isEmpty);
+    expect(payments.collections, isEmpty);
+  });
   for (final status in ['expired', 'cancelled']) {
     testWidgets(
       '$status history never appears as current and respects purchase/payment eligibility',
       (tester) async {
         members.debts[memberId] = [debtJson(status: status)];
         await mount(tester);
-        await reveal(tester, find.text('No current membership.'));
+        await reveal(tester, find.text('No current membership'));
         expect(
           find.descendant(of: currentCard(), matching: find.text('Monthly')),
           findsNothing,
         );
         expect(find.text('Purchase membership'), findsOneWidget);
-        await reveal(tester, find.text('Payment summary'));
+        await reveal(tester, financeCard());
         if (status == 'expired') {
           expect(find.text('Pay Now'), findsOneWidget);
         } else {
           expect(find.text('Pay Now'), findsNothing);
           expect(find.text('Previous membership cancelled'), findsOneWidget);
         }
-        await reveal(tester, find.text('Membership history'));
+        await openHistory(tester);
         expect(
           find.text(
             'Membership: ${status == 'expired' ? 'Expired' : 'Cancelled'}',
@@ -559,7 +562,7 @@ void main() {
         }),
       ];
       await mount(tester);
-      await reveal(tester, find.text('No current membership.'));
+      await reveal(tester, find.text('No current membership'));
       expect(find.textContaining('upcoming membership'), findsOneWidget);
       expect(
         find.descendant(
@@ -604,7 +607,7 @@ void main() {
           .tone,
       AppTone.positive,
     );
-    await reveal(tester, find.text('Payment summary'));
+    await reveal(tester, financeCard());
     expect(find.text('Pay Now'), findsNothing);
     expect(
       find.descendant(of: financeCard(), matching: find.text('₹0.00')),
@@ -616,7 +619,7 @@ void main() {
     (tester) async {
       members.debts[memberId]!.single.remove('paymentSummary');
       await mount(tester);
-      await reveal(tester, find.text('Payment summary'));
+      await reveal(tester, financeCard());
       expect(
         find.descendant(of: financeCard(), matching: find.text('Unavailable')),
         findsOneWidget,
@@ -642,7 +645,7 @@ void main() {
           ..['planNameSnapshot'] = 'Previous plan',
       ];
       await mount(tester);
-      await reveal(tester, find.text('Payment summary'));
+      await reveal(tester, financeCard());
       expect(
         find.descendant(of: financeCard(), matching: find.text('₹1,200.00')),
         findsOneWidget,
@@ -666,7 +669,7 @@ void main() {
     'a missing latest record does not contradict the saved successful payment count',
     (tester) async {
       await mount(tester);
-      await reveal(tester, find.text('View payment history'));
+      await reveal(tester, find.text('Membership & payments'));
       expect(
         find.text('Latest payment details unavailable. Open payment history.'),
         findsOneWidget,
@@ -799,6 +802,7 @@ void main() {
           )..['planNameSnapshot'] = 'Past plan $index',
       ];
       await mount(tester);
+      await openHistory(tester);
       final next = find.byTooltip('Next page');
       await tester.scrollUntilVisible(
         next,
@@ -833,12 +837,16 @@ void main() {
     'failed history refresh retains its snapshot and disables stale actions until retry succeeds',
     (tester) async {
       await mount(tester);
+      await openHistory(tester);
       await reveal(tester, find.text('View membership details'));
       final scope = scopeFor(container.read(adminGymProvider)!, memberId);
       members.historyFailure = const MemberFailure('History refresh failed.');
       container.invalidate(memberHistoryProvider((scope: scope, page: 1)));
       await tester.pumpAndSettle();
-      final history = find.widgetWithText(ProfileSection, 'Membership history');
+      final history = find.widgetWithText(
+        MemberDetailsDisclosure,
+        'Membership history',
+      );
       expect(
         find.descendant(of: history, matching: find.text('Monthly')),
         findsOneWidget,
@@ -878,8 +886,8 @@ void main() {
     tester,
   ) async {
     await mount(tester);
-    await reveal(tester, find.text('View payment history'));
-    await tester.tap(find.text('View payment history'));
+    await reveal(tester, find.text('Membership & payments'));
+    await tester.tap(find.text('Membership & payments'));
     await tester.pumpAndSettle();
     final page = tester.widget<MembershipPage>(find.byType(MembershipPage));
     expect(page.memberId, memberId);
@@ -925,7 +933,7 @@ void main() {
     'refreshing balances preserves last verified dues but disables collection until verified',
     (tester) async {
       await mount(tester);
-      await reveal(tester, find.text('Payment summary'));
+      await reveal(tester, financeCard());
       final scope = scopeFor(container.read(adminGymProvider)!, memberId);
       members.historyGate = Completer<MembershipHistory>();
       container.invalidate(memberMembershipsProvider(scope));
@@ -990,7 +998,7 @@ void main() {
       'Member details',
       'Alex River',
       'Current membership',
-      'Payment summary',
+      'Payments',
       'Assigned trainers',
       'Membership history',
     ]) {
@@ -1005,10 +1013,6 @@ void main() {
         reason: title,
       );
     }
-    final headings = tester.widgetList<ProfileSection>(
-      find.byType(ProfileSection),
-    );
-    expect(headings.every((section) => section.icon != null), isTrue);
     semantics.dispose();
   });
 
@@ -1019,9 +1023,10 @@ void main() {
       for (final label in [
         'Edit member',
         'Pay Now',
-        'View payment history',
+        'Membership & payments',
         'View membership details',
       ]) {
+        if (label == 'View membership details') await openHistory(tester);
         await reveal(tester, find.text(label));
         final button = find
             .ancestor(
@@ -1029,7 +1034,9 @@ void main() {
               matching: find.byWidgetPredicate(
                 (widget) =>
                     widget is ButtonStyleButton ||
-                    widget is FloatingActionButton,
+                    widget is FloatingActionButton ||
+                    // The round quick actions.
+                    widget is InkWell,
               ),
             )
             .first;
@@ -1103,10 +1110,7 @@ void main() {
       ),
     );
     final panels = tester.widgetList<SoftPanel>(find.byType(SoftPanel));
-    expect(panels.map((panel) => panel.tone), [
-      AppTone.plan,
-      AppTone.neutral,
-    ]);
+    expect(panels.map((panel) => panel.tone), [AppTone.plan, AppTone.neutral]);
     // Only the boxed section shows its heading icon.
     expect(find.byIcon(Icons.account_balance_wallet_outlined), findsOneWidget);
     expect(find.byIcon(Icons.info_outline), findsNothing);
@@ -1355,7 +1359,7 @@ void main() {
   ) async {
     final storage = TestOnboardingStorage();
     await mount(tester, recoveryStorage: storage);
-    await reveal(tester, find.text('Payment summary'));
+    await reveal(tester, financeCard());
     final scope = (
       member: scopeFor(container.read(adminGymProvider)!, memberId),
       subscriptionId: subscriptionId,

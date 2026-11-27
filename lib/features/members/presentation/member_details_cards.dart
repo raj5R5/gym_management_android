@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
+import '../../../shared/contact/member_contact.dart';
 import '../../../shared/formatting/payment_date.dart';
 import '../../../shared/widgets/membership_date_range.dart';
+import '../../../shared/widgets/round_action.dart';
 import '../../../shared/widgets/soft_panel.dart';
 import '../../memberships/models/billing_models.dart';
 import '../../memberships/presentation/plan_duration_summary.dart';
@@ -13,6 +15,8 @@ import 'member_components.dart';
 import 'member_list_widgets.dart';
 import '../photos/member_photo_widgets.dart';
 
+/// Who the member is and how to reach them, at a glance: photo, name,
+/// code and status, then one row of quick actions.
 class MemberProfileCard extends StatelessWidget {
   const MemberProfileCard({
     super.key,
@@ -24,80 +28,81 @@ class MemberProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final identity = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Semantics(
-          header: true,
-          child: Text(
-            member.name,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -.5,
-            ),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Member code: ${member.memberCode}',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Semantics(
-          label: 'Member profile status',
-          child: Wrap(
-            spacing: AppSpacing.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text('Profile', style: theme.textTheme.bodySmall),
-              MemberStatusBadge(status: member.status),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        OutlinedButton.icon(
-          onPressed: () => context.push(memberPath(scope, edit: true)),
-          icon: const Icon(Icons.edit_outlined, size: 18),
-          label: const Text('Edit member'),
-        ),
-      ],
-    );
-    final portrait = MemberPhotoAvatar.cover(
-      member: member,
-      width: 128,
-      height: 128,
-      borderRadius: BorderRadius.circular(AppRadii.card),
-      viewable: true,
-    );
-    // The profile is the page header, so it sits on the background.
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth < 288 ||
-                  MediaQuery.textScalerOf(context).scale(14) / 14 > 1.4) {
-                return Column(
+          Row(
+            children: [
+              SizedBox.square(
+                dimension: 72,
+                child: MemberPhotoAvatar.cover(
+                  member: member,
+                  width: 72,
+                  height: 72,
+                  borderRadius: BorderRadius.circular(36),
+                  viewable: true,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    portrait,
-                    const SizedBox(height: AppSpacing.md),
-                    identity,
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        member.name,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Semantics(
+                      label: 'Member profile status',
+                      child: Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.xs,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Member code: ${member.memberCode}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          MemberStatusBadge(status: member.status),
+                        ],
+                      ),
+                    ),
                   ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  portrait,
-                  const SizedBox(width: AppSpacing.lg),
-                  Expanded(child: identity),
-                ],
-              );
-            },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          RoundActionRow(
+            actions: [
+              RoundAction(
+                icon: Icons.call_outlined,
+                label: 'Call',
+                onTap: () => callMember(context, member.phone),
+              ),
+              RoundAction(
+                icon: Icons.chat_outlined,
+                label: 'WhatsApp',
+                onTap: () => whatsappMember(
+                  context,
+                  member.phone,
+                  'Hi ${member.firstName},',
+                ),
+              ),
+              RoundAction(
+                icon: Icons.edit_outlined,
+                label: 'Edit member',
+                onTap: () => context.push(memberPath(scope, edit: true)),
+              ),
+            ],
           ),
         ],
       ),

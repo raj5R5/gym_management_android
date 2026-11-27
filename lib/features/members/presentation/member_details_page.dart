@@ -11,7 +11,7 @@ import '../../../app/router/app_routes.dart';
 import '../../../shared/formatting/inr.dart';
 import '../../../shared/formatting/payment_date.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../../shared/widgets/profile_section.dart';
+import '../../../shared/widgets/glass.dart';
 import '../../memberships/presentation/billing_components.dart'
     show FinancialRefreshStatus;
 import 'member_details_cards.dart';
@@ -173,21 +173,36 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
                     member: data.member,
                     enabled: verified,
                   ),
-                  MemberCurrentMembershipCard(
-                    key: const ValueKey('member-current-membership-card'),
-                    summary: data,
-                    scope: scope,
-                    profileVerified: verified,
+                  // The one card on this screen: the plan and what is owed.
+                  GlassCard(
+                    key: const ValueKey('member-money-card'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        MemberCurrentMembershipCard(
+                          key: const ValueKey('member-current-membership-card'),
+                          summary: data,
+                          scope: scope,
+                          profileVerified: verified,
+                        ),
+                        const Divider(height: AppSpacing.xxl),
+                        MemberPaymentSummaryCard(
+                          key: ValueKey((scope, repository)),
+                          scope: scope,
+                          summary: data,
+                          profileVerified: verified,
+                          timezone: timezone,
+                        ),
+                      ],
+                    ),
                   ),
-                  MemberPaymentSummaryCard(
-                    key: ValueKey((scope, repository)),
+                  const SizedBox(height: AppSpacing.lg),
+                  MemberPaymentsSection(
                     scope: scope,
                     summary: data,
-                    profileVerified: verified,
                     timezone: timezone,
                   ),
                   MemberVisitsCard(member: data.member),
-                  MemberAppAccessCard(gymId: scope.gymId, member: data.member),
                   MemberPtCard(
                     member: PtPerson.fromJson({
                       'id': data.member.id,
@@ -195,6 +210,8 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
                       'memberCode': data.member.memberCode,
                     }),
                   ),
+                  MemberAppAccessCard(gymId: scope.gymId, member: data.member),
+                  const SizedBox(height: AppSpacing.md),
                   MemberPersonalDetails(member: data.member),
                   MemberSupportCards(summary: data),
                   _MembershipHistory(
@@ -241,12 +258,12 @@ class _MembershipHistoryState extends ConsumerState<_MembershipHistory> {
     final history = _snapshot;
     final verified = !state.isLoading && !state.hasError;
     void retry() => ref.invalidate(memberHistoryProvider(widget.request));
-    return ProfileSection(
+    final total = history?.pagination.total;
+    return MemberDetailsDisclosure(
       title: 'Membership history',
-      icon: Icons.history_outlined,
-      subtitle: 'All saved memberships, including the current plan',
-      tone: AppTone.plan,
-      card: false,
+      subtitle: total == null
+          ? null
+          : '$total ${total == 1 ? 'membership' : 'memberships'}',
       children: [
         if (history != null && !verified)
           FinancialRefreshStatus(
@@ -261,32 +278,42 @@ class _MembershipHistoryState extends ConsumerState<_MembershipHistory> {
         if (history != null) ...[
           if (history.subscriptions.isEmpty)
             const Text('No memberships on this page.'),
-          for (final membership in history.subscriptions) ...[
-            const SizedBox(height: AppSpacing.md),
+          for (final (index, membership) in history.subscriptions.indexed) ...[
+            if (index > 0) const Divider(height: AppSpacing.xl),
             SavedMembershipSummary(membership: membership, compact: true),
+            const SizedBox(height: AppSpacing.xs),
             if (membership.payments != null &&
                 membership.payments!.paidPaise +
                         membership.payments!.balancePaise ==
-                    membership.pricePaise) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text('Paid: ${formatInrPaise(membership.payments!.paidPaise)}'),
-              Text(
-                'Due: ${formatInrPaise(membership.payments!.balancePaise)}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: membership.payments!.balancePaise > 0
-                      ? PendingColors.accentFor(Theme.of(context).brightness)
-                      : null,
+                    membership.pricePaise)
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text:
+                          'Paid: ${formatInrPaise(membership.payments!.paidPaise)}   ',
+                    ),
+                    TextSpan(
+                      text:
+                          'Due: ${formatInrPaise(membership.payments!.balancePaise)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: membership.payments!.balancePaise > 0
+                            ? PendingColors.accentFor(
+                                Theme.of(context).brightness,
+                              )
+                            : null,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ] else
+              )
+            else
               const Text('Balance unavailable'),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
+            Row(
               children: [
                 TextButton(
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
                   onPressed: !verified
                       ? null
                       : () => showModalBottomSheet<void>(
@@ -302,6 +329,7 @@ class _MembershipHistoryState extends ConsumerState<_MembershipHistory> {
                         ),
                   child: const Text('View membership details'),
                 ),
+                const Spacer(),
                 IconButton(
                   tooltip: 'Open membership actions',
                   onPressed: !verified
@@ -312,22 +340,22 @@ class _MembershipHistoryState extends ConsumerState<_MembershipHistory> {
                             subscriptionId: membership.id,
                           ),
                         ),
-                  icon: const Icon(Icons.open_in_new_outlined),
+                  icon: const Icon(Icons.chevron_right),
                 ),
               ],
             ),
-            const Divider(height: AppSpacing.lg),
           ],
-          PageControls(
-            page: history.pagination.page,
-            total: history.pagination.total,
-            previous: verified && history.pagination.hasPrevious
-                ? () => widget.onPage(history.pagination.page - 1)
-                : null,
-            next: verified && history.pagination.hasNext
-                ? () => widget.onPage(history.pagination.page + 1)
-                : null,
-          ),
+          if (history.pagination.total > history.subscriptions.length)
+            PageControls(
+              page: history.pagination.page,
+              total: history.pagination.total,
+              previous: verified && history.pagination.hasPrevious
+                  ? () => widget.onPage(history.pagination.page - 1)
+                  : null,
+              next: verified && history.pagination.hasNext
+                  ? () => widget.onPage(history.pagination.page + 1)
+                  : null,
+            ),
         ],
       ],
     );

@@ -565,13 +565,17 @@ void main() {
       expect(find.text('Total paid'), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(MemberPaymentSummaryCard),
+          of: find.byType(MemberPaymentsSection),
           matching: find.text('₹3.03'),
         ),
         findsOneWidget,
       );
       await reveal(tester, find.textContaining('Pat Lee'));
       expect(find.textContaining('Pat Lee'), findsOneWidget);
+      // History starts collapsed.
+      await reveal(tester, find.text('Membership history'));
+      await tester.tap(find.text('Membership history'));
+      await tester.pumpAndSettle();
       await reveal(tester, find.text('View membership details'));
       await tester.tap(find.text('View membership details'));
       await tester.pumpAndSettle();
