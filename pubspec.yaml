@@ -49,6 +49,10 @@ dependencies:
   # pdf pulls in image; image 4.11 calls an archive API that the archive
   # version resolvable on this Dart SDK (4.0.9) lacks. Remove once archive can move.
   image: ">=4.5.4 <4.11.0"
+  file_picker: ^13.4.1
+  # Already resolved through pdf; read Excel (.xlsx) sheets for member import.
+  archive: ^4.0.9
+  xml: ^6.6.1
 
 dev_dependencies:
   flutter_test:

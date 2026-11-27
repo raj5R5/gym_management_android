@@ -25,7 +25,8 @@ class OnboardingPaymentStep extends StatelessWidget {
     }
     final positive = (draft.initialPaymentPaise ?? 0) > 0;
     final requiredReference =
-        positive && (draft.paymentMethod?.requiresReference ?? false);
+        !draft.existingMember &&
+        (positive && (draft.paymentMethod?.requiresReference ?? false));
     return Form(
       key: formKey,
       autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -42,11 +43,26 @@ class OnboardingPaymentStep extends StatelessWidget {
               'Free plan · ${formatInrPaise(plan.pricePaise)}. No initial payment is required.',
             )
           else ...[
+            if (draft.existingMember)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Text(
+                  'Enter what they already paid for this plan. It is saved as '
+                  'paid before the app, dated when their plan started.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Skip initial payment'),
-              subtitle: const Text(
-                'Register the membership without an initial payment.',
+              title: Text(
+                draft.existingMember
+                    ? 'Nothing paid yet'
+                    : 'Skip initial payment',
+              ),
+              subtitle: Text(
+                draft.existingMember
+                    ? 'The full plan price is still owed.'
+                    : 'Register the membership without an initial payment.',
               ),
               value: draft.skipInitialPayment,
               onChanged: (skip) =>
@@ -65,9 +81,11 @@ class OnboardingPaymentStep extends StatelessWidget {
                   decimal: true,
                 ),
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  prefixIcon: FieldIcon('amount'),
-                  labelText: 'Initial payment amount (INR)',
+                decoration: InputDecoration(
+                  prefixIcon: const FieldIcon('amount'),
+                  labelText: draft.existingMember
+                      ? 'Already paid (INR)'
+                      : 'Initial payment amount (INR)',
                   prefixText: '₹ ',
                   helperText:
                       'Enter rupees, e.g. 500.50. Zero records no payment.',

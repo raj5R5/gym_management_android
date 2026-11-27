@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/features/members/models/onboarding_wizard_state.dart';
 import 'package:gym_management_app/features/memberships/models/billing_models.dart';
+import '../admin_dashboard/dashboard_fakes.dart' show gymA;
 import '../memberships/billing_fakes.dart';
 
 void main() {
@@ -80,5 +81,68 @@ void main() {
     });
     expect(valid.copyWith(gender: 'female').toMemberDraft().gender, 'female');
     expect(valid.copyWith(gender: '').toMemberDraft().gender, isNull);
+  });
+
+  group('existing member', () {
+    final plan = MembershipPlan.fromJson(planJson());
+    OnboardingWizardState existing({String joinedOn = '2026-01-10'}) => valid
+        .next()
+        .selectPlan(plan)
+        .copyWith(existingMember: true, joinedOn: joinedOn);
+
+    test('needs a plan start date of today or earlier to continue', () {
+      expect(existing(joinedOn: '').canContinue, isFalse);
+      expect(existing(joinedOn: '2999-01-01').canContinue, isFalse);
+      expect(existing().canContinue, isTrue);
+      expect(existing().next().step, OnboardingWizardStep.payment);
+    });
+
+    test('sends the real start date and an opening payment without a '
+        'UPI reference', () {
+      final review = existing()
+          .next()
+          .copyWith(
+            skipInitialPayment: false,
+            paymentAmount: '1000',
+            paymentMethod: PaymentMethod.upi,
+          )
+          .next();
+      expect(review.step, OnboardingWizardStep.review);
+      final body = review
+          .toRequest(gymId: gymA, paidAt: DateTime.now())
+          .toJson();
+      final membership = body['membership'] as Map<String, dynamic>;
+      expect(membership['startDate'], '2026-01-10');
+      final payment = membership['payment'] as Map<String, dynamic>;
+      expect(payment['openingBalance'], isTrue);
+      expect(payment['amountPaise'], 100000);
+      expect(payment.containsKey('reference'), isFalse);
+      // Dated on the day the plan started, not today.
+      expect(
+        DateTime.parse(payment['paidAt'] as String).toLocal(),
+        DateTime(2026, 1, 10, 12),
+      );
+    });
+
+    test('a new member still starts today and needs a UPI reference', () {
+      final draft = valid
+          .next()
+          .selectPlan(plan)
+          .next()
+          .copyWith(
+            skipInitialPayment: false,
+            paymentAmount: '1000',
+            paymentMethod: PaymentMethod.upi,
+          );
+      expect(draft.initialPaymentReferenceError, isNotNull);
+      expect(draft.paymentValid, isFalse);
+    });
+
+    test('member-only registration turns the existing-member option off', () {
+      expect(
+        existing().copyWith(registerMemberOnly: true).existingMember,
+        isFalse,
+      );
+    });
   });
 }

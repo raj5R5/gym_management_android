@@ -11,6 +11,7 @@ abstract final class AppRoutes {
   static const revenue = '/home/dashboard/revenue';
   static const outstandingDues = '/home/dashboard/dues';
   static const members = '/home/members';
+  static const memberImport = '/home/members/import';
   static const trainers = '/home/trainers';
   static const plans = '/home/plans';
   static const more = '/home/more';

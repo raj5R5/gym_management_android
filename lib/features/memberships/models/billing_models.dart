@@ -109,7 +109,8 @@ class RecordedPayment {
       ),
       paidAt = DateTime.parse(text(json, 'paidAt')),
       reference = optionalText(json, 'transactionReference'),
-      recordedByUserId = optionalText(json, 'recordedByUserId') {
+      recordedByUserId = optionalText(json, 'recordedByUserId'),
+      isOpeningBalance = json['isOpeningBalance'] == true {
     if (amountPaise < 1 ||
         amountPaise > maximumPaymentPaise ||
         !['pending', 'succeeded', 'failed', 'cancelled'].contains(status) ||
@@ -122,6 +123,9 @@ class RecordedPayment {
   final PaymentMethod method;
   final DateTime paidAt;
   final String? reference, recordedByUserId;
+
+  /// Paid before the gym started using the app.
+  final bool isOpeningBalance;
 }
 
 class ManualPayment {

@@ -46,6 +46,7 @@ import '../navigation/admin_shell.dart';
 import '../navigation/form_navigation_guard.dart';
 import '../navigation/foundation_screens.dart';
 import 'app_routes.dart';
+import '../../features/members/import/member_import_page.dart';
 
 /// Where [path] should go for [current]; null keeps it. Pure, for testing.
 String? appRedirect(SessionState current, String path) {
@@ -194,6 +195,10 @@ GoRouter createAppRouter({
                       ? state.extra! as LeadPrefill
                       : null,
                 ),
+              ),
+              GoRoute(
+                path: 'import',
+                builder: (_, _) => const MemberImportPage(),
               ),
               GoRoute(
                 path: ':memberId',

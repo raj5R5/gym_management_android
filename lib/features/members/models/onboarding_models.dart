@@ -69,6 +69,7 @@ class OnboardingPayment {
     required this.amountPaise,
     required DateTime paidAt,
     String reference = '',
+    this.openingBalance = false,
   }) : paidAt = DateTime.fromMillisecondsSinceEpoch(
          paidAt.millisecondsSinceEpoch,
          isUtc: true,
@@ -78,11 +79,14 @@ class OnboardingPayment {
         amountPaise > maximumPaymentPaise ||
         paidAt.isBefore(DateTime.utc(1970)) ||
         paidAt.isAfter(DateTime.now()) ||
-        (this.reference.isNotEmpty || amountPaise > 0) &&
+        (this.reference.isNotEmpty || amountPaise > 0 && !openingBalance) &&
             paymentReferenceError(method, this.reference) != null) {
       throw const FormatException('Invalid initial payment.');
     }
   }
+
+  /// Paid before the gym used the app; its UPI or card reference may be unknown.
+  final bool openingBalance;
   final PaymentMethod method;
   final int amountPaise;
   final DateTime paidAt;
@@ -92,6 +96,7 @@ class OnboardingPayment {
     'amountPaise': amountPaise,
     'paidAt': paidAt.toUtc().toIso8601String(),
     if (reference.isNotEmpty) 'reference': reference,
+    if (openingBalance) 'openingBalance': true,
   };
 }
 
@@ -199,9 +204,13 @@ class OnboardingRequest {
         final payment = object(membership['payment']);
         _shape(
           payment,
-          {'method', 'amountPaise', 'paidAt', 'reference'},
+          {'method', 'amountPaise', 'paidAt', 'reference', 'openingBalance'},
           {'method', 'amountPaise', 'paidAt'},
         );
+        final opening = payment.containsKey('openingBalance');
+        if (opening && payment['openingBalance'] != true) {
+          throw const FormatException('Invalid opening payment.');
+        }
         final method = _method(text(payment, 'method'));
         final amount = _money(payment, 'amountPaise');
         _timestamp(text(payment, 'paidAt'));
@@ -209,7 +218,7 @@ class OnboardingRequest {
             ? text(payment, 'reference')
             : '';
         if (payment.containsKey('reference') && reference.trim().isEmpty ||
-            (reference.isNotEmpty || amount > 0) &&
+            (reference.isNotEmpty || amount > 0 && !opening) &&
                 paymentReferenceError(method, reference) != null) {
           throw const FormatException('Invalid initial payment reference.');
         }
@@ -315,7 +324,8 @@ class OnboardedPayment {
       amountPaise = _money(json, 'amountPaise'),
       method = _method(text(json, 'paymentMethod')),
       paidAt = _timestamp(text(json, 'paidAt')),
-      reference = optionalText(json, 'transactionReference') {
+      reference = optionalText(json, 'transactionReference'),
+      isOpeningBalance = json['isOpeningBalance'] == true {
     _shape(
       json,
       {
@@ -325,6 +335,7 @@ class OnboardedPayment {
         'paymentMethod',
         'paidAt',
         'transactionReference',
+        'isOpeningBalance',
       },
       {'id', 'subscriptionId', 'amountPaise', 'paymentMethod', 'paidAt'},
     );
@@ -337,6 +348,9 @@ class OnboardedPayment {
   final PaymentMethod method;
   final DateTime paidAt;
   final String? reference;
+
+  /// Paid before the gym started using the app.
+  final bool isOpeningBalance;
 }
 
 class OnboardingBillingSummary {

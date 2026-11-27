@@ -113,6 +113,11 @@ class _MembersListState extends ConsumerState<_MembersList> {
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                     ),
+                    IconButton(
+                      tooltip: 'Import members',
+                      onPressed: () => context.push(AppRoutes.memberImport),
+                      icon: const Icon(Icons.upload_file),
+                    ),
                     // Narrow screens or large text keep an icon-only button.
                     if (constraints.maxWidth < 360 ||
                         MediaQuery.textScalerOf(context).scale(16) > 20)

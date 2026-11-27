@@ -156,10 +156,16 @@ class OnboardingReviewStep extends StatelessWidget {
                           'Free plan · ${formatInrPaise(plan.pricePaise)}. No payment is due.',
                         ),
                       const SizedBox(height: AppSpacing.sm),
-                      const IconLabel(
-                        'Start date: Set by the backend when saved (gym timezone).',
-                        icon: Icons.event_available_outlined,
-                      ),
+                      if (draft.existingMember && draft.joinedOnDate != null)
+                        IconLabel(
+                          'Existing member · plan started ${MaterialLocalizations.of(context).formatMediumDate(draft.joinedOnDate!.value)}',
+                          icon: Icons.history_outlined,
+                        )
+                      else
+                        const IconLabel(
+                          'Start date: Set by the backend when saved (gym timezone).',
+                          icon: Icons.event_available_outlined,
+                        ),
                     ],
                   ),
           ),

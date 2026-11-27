@@ -215,6 +215,11 @@ class _OwnerAccountPage extends ConsumerWidget {
                       'Membership Plans',
                       AppRoutes.plans,
                     ),
+                    row(
+                      Icons.upload_file,
+                      'Import members',
+                      AppRoutes.memberImport,
+                    ),
                   ],
                 ),
               ],

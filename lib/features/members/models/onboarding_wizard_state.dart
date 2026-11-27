@@ -38,6 +38,8 @@ class OnboardingWizardState {
     this.paymentAmount = '',
     this.paymentMethod,
     this.paymentReference = '',
+    this.existingMember = false,
+    this.joinedOn = '',
   }) : assert(!registerMemberOnly || selectedPlan == null),
        assert(planPage > 0);
 
@@ -50,6 +52,23 @@ class OnboardingWizardState {
   // Raw field text is retained for editing; all calculated money is integer paise.
   final String paymentAmount, paymentReference;
   final PaymentMethod? paymentMethod;
+
+  /// Already a member before the gym used the app: their plan started on
+  /// [joinedOn] (YYYY-MM-DD) and the payment is what they had paid then.
+  final bool existingMember;
+  final String joinedOn;
+
+  /// [joinedOn] when it is a valid day up to today; otherwise null.
+  CalendarDate? get joinedOnDate {
+    try {
+      final day = CalendarDate.parse(joinedOn.trim());
+      final now = DateTime.now();
+      final today = DateTime.utc(now.year, now.month, now.day);
+      return day.value.isAfter(today) ? null : day;
+    } on FormatException {
+      return null;
+    }
+  }
 
   /// User-entered content only: moving steps or paging plans is not an edit.
   Object get draftValues => (
@@ -65,6 +84,8 @@ class OnboardingWizardState {
     paymentAmount,
     paymentMethod,
     paymentReference,
+    existingMember,
+    joinedOn,
   );
 
   /// Local consistency checks only; final authorization/pricing remain server-owned.
@@ -117,6 +138,14 @@ class OnboardingWizardState {
         ),
       );
       return List.unmodifiable(issues);
+    }
+    if (existingMember && joinedOnDate == null) {
+      issues.add(
+        const OnboardingReviewIssue(
+          OnboardingWizardStep.membershipPlan,
+          'Choose the date their current plan started (today or earlier).',
+        ),
+      );
     }
     if (plan.gymId != gymId || plan.status != 'active') {
       issues.add(
@@ -189,6 +218,8 @@ class OnboardingWizardState {
 
   String? get initialPaymentReferenceError {
     if ((initialPaymentPaise ?? 0) == 0 || paymentMethod == null) return null;
+    // Money paid before the app: a UPI or card reference is optional.
+    if (existingMember && paymentReference.trim().isEmpty) return null;
     return paymentReferenceError(paymentMethod!, paymentReference);
   }
 
@@ -218,9 +249,19 @@ class OnboardingWizardState {
         : OnboardingPayment(
             method: paymentMethod!,
             amountPaise: amount,
-            paidAt: paidAt,
+            paidAt: existingMember ? openingPaidAt(paidAt) : paidAt,
             reference: paymentReference,
+            openingBalance: existingMember,
           );
+  }
+
+  /// An opening payment is dated on the plan's start day (midday), never
+  /// later than [now].
+  DateTime openingPaidAt(DateTime now) {
+    final day = joinedOnDate?.value;
+    if (day == null) return now;
+    final midday = DateTime(day.year, day.month, day.day, 12);
+    return midday.isAfter(now) ? now : midday;
   }
 
   bool canConfirm({required String gymId}) =>
@@ -241,8 +282,9 @@ class OnboardingWizardState {
           ? null
           : OnboardingMembership(
               planId: selectedPlan!.id,
-              // No start-date field is collected. Omitting it lets the backend
-              // resolve gym-local today on the first successful atomic attempt.
+              // New members start today: omitting the date lets the backend
+              // resolve gym-local today. Existing members keep their real start.
+              startDate: existingMember ? joinedOnDate : null,
               payment: toInitialPayment(paidAt: paidAt),
             ),
     );
@@ -251,7 +293,8 @@ class OnboardingWizardState {
   bool get canContinue => switch (step) {
     OnboardingWizardStep.memberDetails => memberDetailsValid,
     OnboardingWizardStep.membershipPlan =>
-      registerMemberOnly || selectedPlan != null,
+      registerMemberOnly ||
+          selectedPlan != null && (!existingMember || joinedOnDate != null),
     OnboardingWizardStep.payment => paymentValid,
     OnboardingWizardStep.review => false,
   };
@@ -291,6 +334,8 @@ class OnboardingWizardState {
     String? paymentAmount,
     PaymentMethod? paymentMethod,
     String? paymentReference,
+    bool? existingMember,
+    String? joinedOn,
   }) {
     final memberOnly = registerMemberOnly ?? this.registerMemberOnly;
     final plan = memberOnly || clearSelectedPlan
@@ -317,6 +362,10 @@ class OnboardingWizardState {
           ? null
           : paymentMethod ?? this.paymentMethod ?? PaymentMethod.cash,
       paymentReference: skip ? '' : paymentReference ?? this.paymentReference,
+      existingMember: memberOnly
+          ? false
+          : existingMember ?? this.existingMember,
+      joinedOn: joinedOn ?? this.joinedOn,
     );
   }
 
@@ -332,7 +381,7 @@ class OnboardingWizardState {
       OnboardingWizardStep.membershipPlan =>
         registerMemberOnly
             ? OnboardingWizardStep.review
-            : selectedPlan != null
+            : selectedPlan != null && (!existingMember || joinedOnDate != null)
             ? OnboardingWizardStep.payment
             : OnboardingWizardStep.membershipPlan,
       OnboardingWizardStep.payment =>

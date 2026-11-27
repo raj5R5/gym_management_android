@@ -28,6 +28,7 @@ import 'onboarding_plan_selection.dart';
 import 'onboarding_payment_step.dart';
 import 'onboarding_review_step.dart';
 import '../../../shared/widgets/page_section.dart';
+import '../../admin_dashboard/models/dashboard_models.dart' show CalendarDate;
 
 class MemberOnboardingPage extends ConsumerWidget {
   const MemberOnboardingPage({super.key, required this.gymId, this.prefill});
@@ -335,6 +336,25 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
         onChanged: (value) =>
             setState(() => _draft = _draft.copyWith(registerMemberOnly: value)),
       ),
+      if (!_draft.registerMemberOnly)
+        SwitchListTile(
+          key: const ValueKey('existing-member'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Joined before using the app'),
+          subtitle: const Text(
+            'Their plan started earlier. Enter that date and what they already paid.',
+          ),
+          value: _draft.existingMember,
+          onChanged: (value) =>
+              setState(() => _draft = _draft.copyWith(existingMember: value)),
+        ),
+      if (_draft.existingMember && !_draft.registerMemberOnly)
+        _PlanStartField(
+          value: _draft.joinedOnDate,
+          onChanged: (day) => setState(
+            () => _draft = _draft.copyWith(joinedOn: day.toString()),
+          ),
+        ),
       const SizedBox(height: AppSpacing.lg),
       if (_draft.registerMemberOnly)
         const Text('The review will include member details only.')
@@ -624,6 +644,51 @@ class OnboardingProgress extends StatelessWidget {
             ],
           ],
         );
+      },
+    );
+  }
+}
+
+/// The day an existing member's current plan began: today or earlier.
+class _PlanStartField extends StatelessWidget {
+  const _PlanStartField({required this.value, required this.onChanged});
+  final CalendarDate? value;
+  final ValueChanged<CalendarDate> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final dates = MaterialLocalizations.of(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return ListTile(
+      key: const ValueKey('plan-start-date'),
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.event_outlined),
+      title: const Text('Plan started on'),
+      subtitle: Text(
+        value == null ? 'Choose a date' : dates.formatMediumDate(value!.value),
+        style: value == null
+            ? TextStyle(color: Theme.of(context).colorScheme.error)
+            : null,
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: value?.value ?? today,
+          firstDate: DateTime(today.year - 3),
+          lastDate: today,
+          helpText: 'Plan started on',
+        );
+        if (picked != null) {
+          onChanged(
+            CalendarDate.parse(
+              '${picked.year.toString().padLeft(4, '0')}-'
+              '${picked.month.toString().padLeft(2, '0')}-'
+              '${picked.day.toString().padLeft(2, '0')}',
+            ),
+          );
+        }
       },
     );
   }

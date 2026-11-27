@@ -116,6 +116,7 @@ class PaymentRow extends StatelessWidget {
         [
           payment.method.label,
           when,
+          if (payment.isOpeningBalance) 'Paid before app',
           if (failed) payment.status,
           if (payment.reference case final reference?) 'Ref $reference',
         ].join(' · '),

@@ -350,6 +350,12 @@ void main() {
       expect(() => OnboardingResult.fromJson(unknown), throwsFormatException);
     },
   );
+  test('a payment marked as paid before the app is accepted in the result', () {
+    final request = onboardingRequest(membership: true, amount: 1);
+    final json = onboardingResultJson(request);
+    json['payment']['isOpeningBalance'] = true;
+    expect(OnboardingResult.fromJson(json).payment!.isOpeningBalance, isTrue);
+  });
   test(
     'result must match gym, plan, member, payment and explicit start date',
     () {

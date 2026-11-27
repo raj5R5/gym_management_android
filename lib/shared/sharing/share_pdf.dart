@@ -31,3 +31,21 @@ Future<void> sharePdf(
     ),
   );
 }
+
+/// Shares any file under [fileName], written to the temporary folder first.
+Future<void> shareFile(
+  Uint8List bytes, {
+  required String fileName,
+  required String mimeType,
+  String? text,
+}) async {
+  final folder = await getTemporaryDirectory();
+  final file = File('${folder.path}/$fileName');
+  await file.writeAsBytes(bytes, flush: true);
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [XFile(file.path, mimeType: mimeType)],
+      text: text,
+    ),
+  );
+}
