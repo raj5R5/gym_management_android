@@ -1,8 +1,4 @@
 import '../photos/member_photo_widgets.dart';
-import '../../visits/member_visit_widgets.dart';
-import '../../member_app/member_access.dart';
-import '../../personal_training/pt.dart';
-import '../../personal_training/pt_widgets.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +11,7 @@ import '../../../shared/widgets/glass.dart';
 import '../../memberships/presentation/billing_components.dart'
     show FinancialRefreshStatus;
 import 'member_details_cards.dart';
+import 'member_details_activity.dart';
 import 'member_details_financial_cards.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../models/member_models.dart';
@@ -138,7 +135,7 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
                         header: true,
                         child: Text(
                           'Member details',
-                          style: Theme.of(context).textTheme.headlineSmall,
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),
                     ),
@@ -169,6 +166,9 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
                     member: data.member,
                     scope: scope,
                   ),
+                  // Where this member stands, in one line, before any detail.
+                  MemberStatusLine(scope: scope, summary: data),
+                  const SizedBox(height: AppSpacing.lg),
                   MemberPhotoRecoveryPanel(
                     member: data.member,
                     enabled: verified,
@@ -197,21 +197,21 @@ class _MemberDetailsPageState extends ConsumerState<MemberDetailsPage> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  MemberPaymentsSection(
+                  MemberActivityList(
                     scope: scope,
                     summary: data,
                     timezone: timezone,
                   ),
-                  MemberVisitsCard(member: data.member),
-                  MemberPtCard(
-                    member: PtPerson.fromJson({
-                      'id': data.member.id,
-                      'name': data.member.name,
-                      'memberCode': data.member.memberCode,
-                    }),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        'Details',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
                   ),
-                  MemberAppAccessCard(gymId: scope.gymId, member: data.member),
-                  const SizedBox(height: AppSpacing.md),
                   MemberPersonalDetails(member: data.member),
                   MemberSupportCards(summary: data),
                   _MembershipHistory(
@@ -261,6 +261,7 @@ class _MembershipHistoryState extends ConsumerState<_MembershipHistory> {
     final total = history?.pagination.total;
     return MemberDetailsDisclosure(
       title: 'Membership history',
+      icon: Icons.history,
       subtitle: total == null
           ? null
           : '$total ${total == 1 ? 'membership' : 'memberships'}',

@@ -22,7 +22,6 @@ import 'package:gym_management_app/features/members/providers/member_overview_pr
 import 'package:gym_management_app/features/members/models/member_overview.dart';
 import 'package:gym_management_app/features/members/presentation/member_form_page.dart';
 import 'package:gym_management_app/features/members/presentation/member_details_page.dart';
-import 'package:gym_management_app/features/members/presentation/member_details_financial_cards.dart';
 import 'package:gym_management_app/features/members/presentation/members_page.dart';
 import '../auth/auth_fakes.dart';
 import '../admin_dashboard/dashboard_fakes.dart';
@@ -561,12 +560,12 @@ void main() {
         repository.operations.where((op) => op.startsWith('get:')),
         isEmpty,
       );
-      await reveal(tester, find.text('Total paid'));
-      expect(find.text('Total paid'), findsOneWidget);
+      await reveal(tester, find.textContaining('Total paid'));
+      expect(find.textContaining('Total paid'), findsOneWidget);
       expect(
         find.descendant(
-          of: find.byType(MemberPaymentsSection),
-          matching: find.text('₹3.03'),
+          of: find.byKey(const ValueKey('member-payments-row')),
+          matching: find.textContaining('₹3.03'),
         ),
         findsOneWidget,
       );

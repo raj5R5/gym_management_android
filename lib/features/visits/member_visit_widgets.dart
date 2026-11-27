@@ -14,6 +14,65 @@ import 'visit_models.dart';
 import 'visit_repository.dart';
 import '../../shared/widgets/page_section.dart';
 
+/// Checks [member] in now. When their membership is not active, asks before
+/// checking them in anyway. Reports the result in a snackbar.
+Future<void> checkInMember(
+  BuildContext context,
+  WidgetRef ref,
+  MemberProfile member, {
+  bool override = false,
+}) async {
+  final gym = ref.read(adminGymProvider);
+  if (gym == null) return;
+  final messenger = ScaffoldMessenger.of(context);
+  // The page may close while the request runs; keep the container, not ref.
+  final container = ProviderScope.containerOf(context, listen: false);
+  try {
+    final result = await container
+        .read(visitRepositoryProvider)
+        .checkIn(gym.gymId, member.id, override: override);
+    HapticFeedback.mediumImpact();
+    container
+      ..invalidate(memberVisitHistoryProvider(member.id))
+      ..invalidate(todayVisitsProvider)
+      ..invalidate(memberOverviewProvider)
+      ..invalidate(dashboardProvider);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.alreadyCheckedIn
+              ? '${member.firstName} already checked in today'
+              : '${member.firstName} checked in',
+        ),
+      ),
+    );
+  } on MembershipNotActive catch (refusal) {
+    if (!context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(refusal.title),
+        content: Text(refusal.message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Don't check in"),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Check in anyway'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await checkInMember(context, ref, member, override: true);
+    }
+  } on VisitFailure catch (failure) {
+    messenger.showSnackBar(SnackBar(content: Text(failure.message)));
+  }
+}
+
 /// Visits on the member page: last visit, last 30 days, check-in and QR card.
 class MemberVisitsCard extends ConsumerStatefulWidget {
   const MemberVisitsCard({super.key, required this.member});
@@ -25,53 +84,11 @@ class MemberVisitsCard extends ConsumerStatefulWidget {
 class _MemberVisitsCardState extends ConsumerState<MemberVisitsCard> {
   bool _busy = false;
 
-  Future<void> _checkIn({bool override = false}) async {
-    final gym = ref.read(adminGymProvider);
-    if (gym == null || _busy) return;
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _checkIn() async {
+    if (_busy) return;
     setState(() => _busy = true);
     try {
-      final result = await ref
-          .read(visitRepositoryProvider)
-          .checkIn(gym.gymId, widget.member.id, override: override);
-      HapticFeedback.mediumImpact();
-      ref.invalidate(memberVisitHistoryProvider(widget.member.id));
-      ref.invalidate(todayVisitsProvider);
-      ref.invalidate(memberOverviewProvider);
-      ref.invalidate(dashboardProvider);
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result.alreadyCheckedIn
-                ? '${widget.member.firstName} already checked in today'
-                : '${widget.member.firstName} checked in',
-          ),
-        ),
-      );
-    } on MembershipNotActive catch (refusal) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(refusal.title),
-          content: Text(refusal.message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Don't check in"),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Check in anyway'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed == true) await _checkIn(override: true);
-      return;
-    } on VisitFailure catch (failure) {
-      messenger.showSnackBar(SnackBar(content: Text(failure.message)));
+      await checkInMember(context, ref, widget.member);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

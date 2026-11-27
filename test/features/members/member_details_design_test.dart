@@ -17,6 +17,7 @@ import 'package:gym_management_app/features/admin_dashboard/models/dashboard_mod
 import 'package:gym_management_app/features/auth/providers/auth_providers.dart';
 import 'package:gym_management_app/features/members/data/member_failure.dart';
 import 'package:gym_management_app/features/members/models/member_models.dart';
+import 'package:gym_management_app/features/members/presentation/member_details_activity.dart';
 import 'package:gym_management_app/features/members/presentation/member_details_cards.dart';
 import 'package:gym_management_app/features/members/presentation/member_details_financial_cards.dart';
 import 'package:gym_management_app/features/members/presentation/member_details_page.dart';
@@ -210,7 +211,7 @@ void main() {
       final dashboard = FakeDashboardRepository()
         ..result = GymDashboard.fromJson(json);
       await mount(tester, dashboard: dashboard);
-      await reveal(tester, find.text('Total paid'));
+      await reveal(tester, find.textContaining('Total paid'));
       expect(
         tester
             .widget<MemberLatestPayment>(find.byType(MemberLatestPayment))
@@ -225,7 +226,7 @@ void main() {
   ) async {
     final dashboard = FakeDashboardRepository();
     await mount(tester, dashboard: dashboard);
-    await reveal(tester, find.text('Total paid'));
+    await reveal(tester, find.textContaining('Total paid'));
     String? displayedZone() => tester
         .widget<MemberLatestPayment>(find.byType(MemberLatestPayment))
         .timezone;
@@ -269,10 +270,15 @@ void main() {
       final moneyCard = rows.children.indexWhere(
         (widget) => widget.key == const ValueKey('member-money-card'),
       );
-      expect(types.indexOf(MemberProfileCard), lessThan(moneyCard));
-      expect(moneyCard, lessThan(types.indexOf(MemberPaymentsSection)));
+      // Who, then where they stand, then the money, then activity, then details.
       expect(
-        types.indexOf(MemberPaymentsSection),
+        types.indexOf(MemberProfileCard),
+        lessThan(types.indexOf(MemberStatusLine)),
+      );
+      expect(types.indexOf(MemberStatusLine), lessThan(moneyCard));
+      expect(moneyCard, lessThan(types.indexOf(MemberActivityList)));
+      expect(
+        types.indexOf(MemberActivityList),
         lessThan(types.indexOf(MemberPersonalDetails)),
       );
       // Plan first, then what is owed, inside the one card.
@@ -293,9 +299,21 @@ void main() {
     (tester) async {
       members.debts[memberId] = [debtJson(status: 'expired')];
       await mount(tester);
-      await reveal(tester, find.text('Membership expired'));
+      // The status line says it first; the membership card says it again.
+      final expired = find.descendant(
+        of: currentCard(),
+        matching: find.text('Membership expired'),
+      );
+      await reveal(tester, expired);
+      expect(
+        find.descendant(
+          of: find.byType(MemberStatusLine),
+          matching: find.text('₹500.00 due'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('No current membership'), findsOneWidget);
-      await reveal(tester, find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
       expect(
         find.descendant(of: financeCard(), matching: find.text('₹500.00')),
         findsOneWidget,
@@ -318,8 +336,8 @@ void main() {
     );
     await reveal(tester, find.text('Fully Paid'));
     expect(find.text('Membership: Active'), findsOneWidget);
-    await reveal(tester, find.text('Current outstanding'));
-    expect(find.text('Pay Now'), findsNothing);
+    await reveal(tester, find.text('To collect'));
+    expect(find.text('Collect payment'), findsNothing);
     expect(find.text('No outstanding dues.'), findsOneWidget);
   });
 
@@ -337,7 +355,16 @@ void main() {
       find.descendant(of: currentCard(), matching: find.text('Fully Paid')),
       findsOneWidget,
     );
-    await reveal(tester, find.text('Pay Now'));
+    // The top line never hides older debt behind a paid current plan.
+    expect(
+      find.descendant(
+        of: find.byType(MemberStatusLine),
+        matching: find.text('₹700.00 due'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('from older plans'), findsOneWidget);
+    await reveal(tester, find.text('Collect payment'));
     expect(
       find.descendant(of: financeCard(), matching: find.text('₹700.00')),
       findsOneWidget,
@@ -434,10 +461,11 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(
-        of: card,
-        matching: find.text('₹1,000.00 paid of ₹1,500.00'),
-      ),
+      find.descendant(of: card, matching: find.text('₹1,000.00')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('₹1,500.00')),
       findsOneWidget,
     );
     // The plan's dates are past, so no time left or progress is invented.
@@ -452,8 +480,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Purchase membership'), findsNothing);
-    await reveal(tester, find.text('Membership & payments'));
-    await tester.tap(find.text('Membership & payments'));
+    await reveal(tester, find.byKey(const ValueKey('member-payments-row')));
+    await tester.tap(find.byKey(const ValueKey('member-payments-row')));
     await tester.pumpAndSettle();
     expect(find.byType(MembershipPage), findsOneWidget);
     expect(
@@ -502,7 +530,8 @@ void main() {
       'Monthly legacy offer',
       '1 Jan 2026 –',
       '6 Apr 2026',
-      '₹1,000.00 paid of ₹1,500.00',
+      '₹1,000.00',
+      '₹1,500.00',
     ]) {
       expect(
         find.descendant(of: currentCard(), matching: find.text(value)),
@@ -527,9 +556,9 @@ void main() {
         expect(find.text('Purchase membership'), findsOneWidget);
         await reveal(tester, financeCard());
         if (status == 'expired') {
-          expect(find.text('Pay Now'), findsOneWidget);
+          expect(find.text('Collect payment'), findsOneWidget);
         } else {
-          expect(find.text('Pay Now'), findsNothing);
+          expect(find.text('Collect payment'), findsNothing);
           expect(find.text('Previous membership cancelled'), findsOneWidget);
         }
         await openHistory(tester);
@@ -608,7 +637,7 @@ void main() {
       AppTone.positive,
     );
     await reveal(tester, financeCard());
-    expect(find.text('Pay Now'), findsNothing);
+    expect(find.text('Collect payment'), findsNothing);
     expect(
       find.descendant(of: financeCard(), matching: find.text('₹0.00')),
       findsOneWidget,
@@ -628,7 +657,7 @@ void main() {
         find.descendant(of: financeCard(), matching: find.text('₹0.00')),
         findsNothing,
       );
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       expect(
         find.textContaining('balances could not be verified'),
         findsOneWidget,
@@ -650,7 +679,7 @@ void main() {
         find.descendant(of: financeCard(), matching: find.text('₹1,200.00')),
         findsOneWidget,
       );
-      await tester.tap(find.text('Pay Now'));
+      await tester.tap(find.text('Collect payment'));
       await tester.pumpAndSettle();
       expect(find.text('Choose membership to pay'), findsOneWidget);
       await tester.tap(find.byKey(ValueKey('pay-membership-$gymB')));
@@ -669,7 +698,7 @@ void main() {
     'a missing latest record does not contradict the saved successful payment count',
     (tester) async {
       await mount(tester);
-      await reveal(tester, find.text('Membership & payments'));
+      await reveal(tester, find.byKey(const ValueKey('member-payments-row')));
       expect(
         find.text('Latest payment details unavailable. Open payment history.'),
         findsOneWidget,
@@ -886,8 +915,8 @@ void main() {
     tester,
   ) async {
     await mount(tester);
-    await reveal(tester, find.text('Membership & payments'));
-    await tester.tap(find.text('Membership & payments'));
+    await reveal(tester, find.byKey(const ValueKey('member-payments-row')));
+    await tester.tap(find.byKey(const ValueKey('member-payments-row')));
     await tester.pumpAndSettle();
     final page = tester.widget<MembershipPage>(find.byType(MembershipPage));
     expect(page.memberId, memberId);
@@ -944,7 +973,7 @@ void main() {
         find.descendant(of: financeCard(), matching: find.text('₹500.00')),
         findsOneWidget,
       );
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       members.historyGate!.complete(
         MembershipHistory.fromResponse(historyJson(populated: true), {
           'page': 1,
@@ -953,7 +982,7 @@ void main() {
         }),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Current outstanding'), findsOneWidget);
+      expect(find.text('To collect'), findsOneWidget);
     },
   );
   testWidgets(
@@ -998,7 +1027,8 @@ void main() {
       'Member details',
       'Alex River',
       'Current membership',
-      'Payments',
+      'Activity',
+      'Details',
       'Assigned trainers',
       'Membership history',
     ]) {
@@ -1022,8 +1052,7 @@ void main() {
       await mount(tester);
       for (final label in [
         'Edit member',
-        'Pay Now',
-        'Membership & payments',
+        'Collect payment',
         'View membership details',
       ]) {
         if (label == 'View membership details') await openHistory(tester);
@@ -1249,10 +1278,10 @@ void main() {
           lessThanOrEqualTo(AppSpacing.contentWidth),
         );
         expect(tester.takeException(), isNull);
-        await reveal(tester, find.text('Pay Now'));
-        expect(find.text('Pay Now').hitTestable(), findsOneWidget);
+        await reveal(tester, find.text('Collect payment'));
+        expect(find.text('Collect payment').hitTestable(), findsOneWidget);
         expect(
-          tester.getBottomLeft(find.text('Pay Now')).dy,
+          tester.getBottomLeft(find.text('Collect payment')).dy,
           lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
         );
         await reveal(tester, find.text('View membership details'));
@@ -1286,10 +1315,10 @@ void main() {
         });
         await mount(tester);
         expect(tester.takeException(), isNull);
-        await reveal(tester, find.text('Pay Now'));
+        await reveal(tester, find.text('Collect payment'));
         expect(tester.takeException(), isNull);
         expect(
-          tester.getBottomLeft(find.text('Pay Now')).dy,
+          tester.getBottomLeft(find.text('Collect payment')).dy,
           lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
         );
         await reveal(tester, find.text('View membership details'));
@@ -1306,9 +1335,9 @@ void main() {
     (tester) async {
       await mount(tester);
       expect(find.byType(FloatingActionButton), findsNothing);
-      await reveal(tester, find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
       final pay = find.ancestor(
-        of: find.text('Pay Now'),
+        of: find.text('Collect payment'),
         matching: find.byWidgetPredicate((widget) => widget is FilledButton),
       );
       expect(find.descendant(of: financeCard(), matching: pay), findsOneWidget);
@@ -1317,7 +1346,7 @@ void main() {
         tester.getBottomLeft(pay).dy,
         lessThan(tester.getTopLeft(find.byType(NavigationBar)).dy),
       );
-      expect(find.text('Pay Now'), findsOneWidget);
+      expect(find.text('Collect payment'), findsOneWidget);
       expect(payments.collections, isEmpty);
       final memberScaffolds = find.descendant(
         of: find.byType(MemberDetailsPage),
@@ -1338,15 +1367,15 @@ void main() {
           .go('${AppRoutes.outstandingDues}?gymId=$gymA');
       await tester.pumpAndSettle();
       expect(find.byType(FloatingActionButton), findsNothing);
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       await reveal(tester, find.text('Alex River'));
       await tester.tap(find.text('Alex River'));
       await tester.pumpAndSettle();
       expect(find.byType(MemberDetailsPage), findsOneWidget);
-      await reveal(tester, find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
       expect(
         find.ancestor(
-          of: find.text('Pay Now'),
+          of: find.text('Collect payment'),
           matching: find.byWidgetPredicate((widget) => widget is FilledButton),
         ),
         findsOneWidget,
@@ -1368,13 +1397,13 @@ void main() {
     container.invalidate(paymentCollectionProvider(scope));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Pay Now'), findsNothing);
+    expect(find.text('Collect payment'), findsNothing);
     expect(payments.collections, isEmpty);
     storage.readGate!.complete();
     await tester.pumpAndSettle();
     expect(
       find.ancestor(
-        of: find.text('Pay Now'),
+        of: find.text('Collect payment'),
         matching: find.byWidgetPredicate((widget) => widget is FilledButton),
       ),
       findsOneWidget,
@@ -1405,8 +1434,8 @@ void main() {
         50000,
       );
       await tester.pumpAndSettle();
-      expect(find.text('Pay Now'), findsNothing);
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       await reveal(tester, find.text('Review saved payment · Monthly'));
       await tester.tap(find.text('Review saved payment · Monthly'));
       await tester.pumpAndSettle();
@@ -1429,7 +1458,7 @@ void main() {
       storage.failRead = true;
       container.invalidate(paymentCollectionProvider(scope));
       await tester.pumpAndSettle();
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       expect(payments.collections, isEmpty);
       await reveal(tester, find.text('Review saved payment · Monthly'));
       expect(find.text('Review saved payment · Monthly'), findsOneWidget);
@@ -1463,7 +1492,7 @@ void main() {
       container.invalidate(memberMembershipsProvider(memberScope));
       container.invalidate(memberSummaryProvider(memberScope));
       await tester.pumpAndSettle();
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       await reveal(tester, find.text('Review saved payment · Monthly'));
       await tester.tap(find.text('Review saved payment · Monthly'));
       await tester.pumpAndSettle();

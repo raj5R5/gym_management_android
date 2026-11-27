@@ -11,7 +11,6 @@ import '../../memberships/models/membership_eligibility.dart';
 import '../../memberships/presentation/billing_components.dart';
 import '../models/member_models.dart';
 import '../providers/member_providers.dart';
-import 'member_details_cards.dart';
 import 'member_list_widgets.dart';
 import 'member_pay_now.dart';
 
@@ -97,20 +96,19 @@ class MemberCurrentMembershipCard extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
           MembershipAtAGlance(membership: membership),
           const SizedBox(height: AppSpacing.md),
-          if (paid != null && due != null)
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${formatInrPaise(paid)} paid of ${formatInrPaise(membership.pricePaise)}',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-                if (due == 0)
-                  const StatusPill(label: 'Fully Paid', tone: AppTone.positive),
-              ],
-            )
-          else
+          if (paid != null && due != null) ...[
+            BillRow(label: 'Plan price', amountPaise: membership.pricePaise),
+            BillRow(
+              label: 'Paid',
+              amountPaise: paid,
+              trailing: due == 0
+                  ? const StatusPill(
+                      label: 'Fully Paid',
+                      tone: AppTone.positive,
+                    )
+                  : null,
+            ),
+          ] else
             const Text(
               'Balance unavailable. Refresh to verify membership payments.',
             ),
@@ -195,23 +193,30 @@ class MembershipAtAGlance extends StatelessWidget {
         ),
         if (headline != null) ...[
           const SizedBox(height: AppSpacing.md),
-          Text(
-            headline,
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-        if (running && total > 0) ...[
-          const SizedBox(height: AppSpacing.sm),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadii.sm),
-            child: LinearProgressIndicator(
-              minHeight: 6,
-              value: ((total - left) / total).clamp(0.0, 1.0),
-              semanticsLabel: 'Membership time used',
-            ),
+          // Time used, with what is left right beside it.
+          Row(
+            children: [
+              if (running && total > 0) ...[
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.sm),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      value: ((total - left) / total).clamp(0.0, 1.0),
+                      semanticsLabel: 'Membership time used',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+              ],
+              Text(
+                headline,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
         ],
         const SizedBox(height: AppSpacing.sm),
@@ -279,43 +284,27 @@ class _MemberPaymentSummaryCardState
     final theme = Theme.of(context);
     final dues = _verifiedDues;
     final owes = dues != null && dues > 0;
+    // Money owed on plans other than the current one.
+    final currentDue = currentMembershipBalance(widget.summary) == null
+        ? 0
+        : widget.summary.currentPayments?.balancePaise ?? 0;
+    final olderPaise = dues == null ? 0 : dues - currentDue;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    fresh
-                        ? 'Current outstanding'
-                        : dues == null
-                        ? 'Outstanding balance'
-                        : 'Last verified dues',
-                    style: theme.textTheme.labelMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    dues == null ? 'Unavailable' : formatInrPaise(dues),
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: owes
-                          ? PendingColors.accentFor(theme.brightness)
-                          : theme.colorScheme.onSurface,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        BillRow(
+          label: fresh
+              ? 'To collect'
+              : dues == null
+              ? 'Outstanding balance'
+              : 'Last verified dues',
+          amountPaise: dues,
+          total: true,
+          color: owes ? PendingColors.accentFor(theme.brightness) : null,
         ),
-        if (owes)
+        if (owes && olderPaise > 0)
           Text(
-            'All unpaid memberships, including expired plans.',
+            'Includes ${formatInrPaise(olderPaise)} from older plans, including expired plans.',
             style: theme.textTheme.bodySmall,
           )
         else if (fresh && dues == 0)
@@ -350,54 +339,56 @@ class _MemberPaymentSummaryCardState
   }
 }
 
-/// Money already received: the total, the latest payment and the way to
-/// the full history.
-class MemberPaymentsSection extends StatelessWidget {
-  const MemberPaymentsSection({
+/// One line of a bill: label on the left, amount on the right. [total]
+/// marks the line that matters, set apart by a rule above it.
+class BillRow extends StatelessWidget {
+  const BillRow({
     super.key,
-    required this.scope,
-    required this.summary,
-    this.timezone,
+    required this.label,
+    required this.amountPaise,
+    this.total = false,
+    this.color,
+    this.trailing,
   });
-  final MemberScope scope;
-  final MemberSummary summary;
-  final String? timezone;
+  final String label;
+  final int? amountPaise;
+  final bool total;
+  final Color? color;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final payments = summary.payments;
-    return ProfileSection(
-      title: 'Payments',
-      children: [
-        Wrap(
-          spacing: AppSpacing.sm,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            const Text('Total paid'),
-            Text(
-              formatInrPaise(payments.totalPaise),
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            Text(
-              '· ${payments.count} ${payments.count == 1 ? 'payment' : 'payments'}',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ),
-        MemberLatestPayment(payments: payments, timezone: timezone),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            style: TextButton.styleFrom(padding: EdgeInsets.zero),
-            onPressed: () => context.push(membershipPath(scope)),
-            icon: const Icon(Icons.receipt_long_outlined),
-            label: const Text('Membership & payments'),
+    final amount = Text(
+      amountPaise == null ? 'Unavailable' : formatInrPaise(amountPaise!),
+      style: (total ? theme.textTheme.titleLarge : theme.textTheme.bodyLarge)
+          ?.copyWith(
+            color: color,
+            fontWeight: total ? FontWeight.w700 : null,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
-        ),
-      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: total
+                  ? theme.textTheme.titleMedium
+                  : theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+            ),
+          ),
+          if (trailing != null) ...[
+            trailing!,
+            const SizedBox(width: AppSpacing.sm),
+          ],
+          amount,
+        ],
+      ),
     );
   }
 }

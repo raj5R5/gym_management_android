@@ -168,7 +168,7 @@ void main() {
       members.historyRecords = null;
       container.invalidate(memberHistoryProvider);
       await tester.pumpAndSettle();
-      await tap(tester, find.text('Membership & payments'));
+      await tap(tester, find.text('Payments'));
       expect(find.text('Membership & payments'), findsOneWidget);
       expect(find.text('Current membership'), findsOneWidget);
       expect(find.textContaining('Balance: ₹1,496.97'), findsOneWidget);

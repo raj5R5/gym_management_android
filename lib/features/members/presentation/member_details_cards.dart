@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
@@ -14,10 +15,11 @@ import '../providers/member_providers.dart';
 import 'member_components.dart';
 import 'member_list_widgets.dart';
 import '../photos/member_photo_widgets.dart';
+import '../../visits/member_visit_widgets.dart';
 
 /// Who the member is and how to reach them, at a glance: photo, name,
 /// code and status, then one row of quick actions.
-class MemberProfileCard extends StatelessWidget {
+class MemberProfileCard extends ConsumerWidget {
   const MemberProfileCard({
     super.key,
     required this.member,
@@ -26,7 +28,7 @@ class MemberProfileCard extends StatelessWidget {
   final MemberProfile member;
   final MemberScope scope;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.xl),
@@ -98,6 +100,11 @@ class MemberProfileCard extends StatelessWidget {
                 ),
               ),
               RoundAction(
+                icon: Icons.login,
+                label: 'Check in',
+                onTap: () => checkInMember(context, ref, member),
+              ),
+              RoundAction(
                 icon: Icons.edit_outlined,
                 label: 'Edit member',
                 onTap: () => context.push(memberPath(scope, edit: true)),
@@ -117,13 +124,17 @@ class MemberDetailsDisclosure extends StatelessWidget {
     required this.title,
     required this.children,
     this.subtitle,
+    this.icon,
   });
   final String title;
   final String? subtitle;
   final List<Widget> children;
+
+  /// Matches the icon column of the activity rows above.
+  final IconData? icon;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+    padding: EdgeInsets.zero,
     child: Material(
       type: MaterialType.transparency,
       child: ExpansionTile(
@@ -132,9 +143,10 @@ class MemberDetailsDisclosure extends StatelessWidget {
         childrenPadding: const EdgeInsets.only(bottom: AppSpacing.lg),
         shape: const Border(),
         collapsedShape: const Border(),
+        leading: icon == null ? null : Icon(icon),
         title: Semantics(
           header: true,
-          child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+          child: Text(title, style: Theme.of(context).textTheme.bodyLarge),
         ),
         subtitle: subtitle == null ? null : Text(subtitle!),
         children: children,
@@ -150,6 +162,7 @@ class MemberPersonalDetails extends StatelessWidget {
   Widget build(BuildContext context) => MemberDetailsDisclosure(
     title: 'Contact & personal details',
     subtitle: member.phone,
+    icon: Icons.contact_phone_outlined,
     children: [
       MemberInfoLine(
         icon: Icons.phone_outlined,
@@ -461,6 +474,7 @@ class MemberSupportCards extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MemberDetailsDisclosure(
     title: 'Assigned trainers',
+    icon: Icons.fitness_center_outlined,
     children: [
       if (summary.trainers.isEmpty)
         const Align(
@@ -478,9 +492,17 @@ class MemberSupportCards extends StatelessWidget {
 }
 
 class MemberLatestPayment extends StatelessWidget {
-  const MemberLatestPayment({super.key, required this.payments, this.timezone});
+  const MemberLatestPayment({
+    super.key,
+    required this.payments,
+    this.timezone,
+    this.compact = false,
+  });
   final MemberPaymentSummary payments;
   final String? timezone;
+
+  /// One short line, for a list row.
+  final bool compact;
   @override
   Widget build(BuildContext context) {
     final latest = payments.latest;
@@ -497,6 +519,15 @@ class MemberLatestPayment extends StatelessWidget {
             .firstOrNull
             ?.label ??
         'Method unavailable';
+    if (compact) {
+      return Text(
+        'Last ${formatInrPaise(latest.amountPaise)} · $method · '
+        '${formatPaymentDateTime(MaterialLocalizations.of(context), latest.paidAt, timezone: timezone, showZone: false)}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
     return MemberInfoLine(
       icon: Icons.check_circle_outline,
       label: 'Latest successful payment',

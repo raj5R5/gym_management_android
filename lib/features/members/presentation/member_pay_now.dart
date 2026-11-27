@@ -116,7 +116,7 @@ class _MemberPayNowState extends ConsumerState<MemberPayNow> {
       icon: Icon(
         _opening ? Icons.hourglass_top_outlined : Icons.add_card_outlined,
       ),
-      label: Text(_opening ? 'Opening payment…' : 'Pay Now'),
+      label: Text(_opening ? 'Opening payment…' : 'Collect payment'),
     );
   }
 }

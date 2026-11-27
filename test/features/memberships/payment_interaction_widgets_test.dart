@@ -1043,9 +1043,9 @@ void main() {
     (tester) async {
       await mount(tester);
       await showMemberDetails(tester);
-      await reveal(tester, find.text('Pay Now'));
-      await tester.tap(find.text('Pay Now'));
-      await tester.tap(find.text('Pay Now'), warnIfMissed: false);
+      await reveal(tester, find.text('Collect payment'));
+      await tester.tap(find.text('Collect payment'));
+      await tester.tap(find.text('Collect payment'), warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(find.byType(RecordPaymentSheet), findsOneWidget);
       expect(find.text('Choose membership to pay'), findsNothing);
@@ -1076,8 +1076,8 @@ void main() {
         )..['planNameSnapshot'] = 'Cancelled plan',
       ];
       await showMemberDetails(tester);
-      await reveal(tester, find.text('Pay Now'));
-      await tester.tap(find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
+      await tester.tap(find.text('Collect payment'));
       await tester.pumpAndSettle();
       expect(find.text('Choose membership to pay'), findsOneWidget);
       expect(find.byType(RecordPaymentSheet), findsNothing);
@@ -1114,8 +1114,8 @@ void main() {
     await mount(tester);
     members.debts[memberId]!.add(debtJson(id: gymB, status: 'expired'));
     await showMemberDetails(tester);
-    await reveal(tester, find.text('Pay Now'));
-    await tester.tap(find.text('Pay Now'));
+    await reveal(tester, find.text('Collect payment'));
+    await tester.tap(find.text('Collect payment'));
     await tester.pumpAndSettle();
     expect(find.text('Choose membership to pay'), findsOneWidget);
   }
@@ -1218,7 +1218,7 @@ void main() {
       await tester.tap(find.byTooltip('Close membership selection'));
       await tester.pumpAndSettle();
       expect(find.byType(BottomSheet), findsNothing);
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
     },
   );
 
@@ -1280,7 +1280,7 @@ void main() {
       members.debts[memberId] = [record];
       await showMemberDetails(tester);
       await reveal(tester, find.text('Membership & payments'));
-      expect(find.text('Pay Now'), findsNothing);
+      expect(find.text('Collect payment'), findsNothing);
       expect(find.byType(RecordPaymentSheet), findsNothing);
       expect(payments.collections, isEmpty);
       if (mode == 'unverified') {
@@ -1305,8 +1305,8 @@ void main() {
       await mount(tester);
       members.debts[memberId]!.add(debtJson(id: gymB, status: 'expired'));
       await showMemberDetails(tester);
-      await reveal(tester, find.text('Pay Now'));
-      await tester.tap(find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
+      await tester.tap(find.text('Collect payment'));
       await tester.pumpAndSettle();
       expect(find.text('Choose membership to pay'), findsOneWidget);
       container.read(adminGymProvider.notifier).selectGym(gymB);
@@ -1334,9 +1334,9 @@ void main() {
         debtJson(id: gymB, balance: 70000, status: 'expired'),
       ];
       await showMemberDetails(tester);
-      await reveal(tester, find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
       expect(members.operations, contains('memberships:$gymA:$memberId:2'));
-      await tester.tap(find.text('Pay Now'));
+      await tester.tap(find.text('Collect payment'));
       await tester.pumpAndSettle();
       expect(
         tester
@@ -1360,8 +1360,8 @@ void main() {
       container.listen(outstandingDuesProvider, (_, _) {});
       await container.read(outstandingDuesProvider.future);
       await showMemberDetails(tester);
-      await reveal(tester, find.text('Pay Now'));
-      await tester.tap(find.text('Pay Now'));
+      await reveal(tester, find.text('Collect payment'));
+      await tester.tap(find.text('Collect payment'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const Key('collection-amount')), '100');
       await confirm(tester);
@@ -1781,8 +1781,8 @@ void main() {
                 'Previous strength and conditioning membership with weekend gym access',
         ];
         await showMemberDetails(tester);
-        await reveal(tester, find.text('Pay Now'));
-        await tester.tap(find.text('Pay Now'));
+        await reveal(tester, find.text('Collect payment'));
+        await tester.tap(find.text('Collect payment'));
         await tester.pumpAndSettle();
         await tester.ensureVisible(
           find.byKey(ValueKey('pay-membership-$gymB')),
