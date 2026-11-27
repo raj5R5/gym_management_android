@@ -189,6 +189,7 @@ GoRouter createAppRouter({
                 onExit: protectForm,
                 builder: (_, state) => MemberOnboardingPage(
                   gymId: state.uri.queryParameters['gymId'],
+                  existing: state.uri.queryParameters['existing'] == '1',
                   // Converting an enquiry passes its name and phone in memory,
                   // never in the URL.
                   prefill: state.extra is LeadPrefill

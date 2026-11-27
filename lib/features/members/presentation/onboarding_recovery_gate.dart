@@ -606,7 +606,7 @@ class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
                           const Text('No initial payment was recorded.'),
                         const SizedBox(height: AppSpacing.lg),
                         const Text(
-                          'This confirmed result stays saved until you acknowledge it.',
+                          'Saved. Tap Done to add the next member.',
                         ),
                         TextButton(
                           onPressed: () async {
@@ -632,7 +632,7 @@ class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
                         ),
                         FilledButton(
                           onPressed: () => _act(acknowledge: true),
-                          child: const Text('Acknowledge registration'),
+                          child: const Text('Done, add next member'),
                         ),
                       ] else if (operation != null) ...[
                         if (blocked) ...[

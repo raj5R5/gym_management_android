@@ -31,8 +31,17 @@ import '../../../shared/widgets/page_section.dart';
 import '../../admin_dashboard/models/dashboard_models.dart' show CalendarDate;
 
 class MemberOnboardingPage extends ConsumerWidget {
-  const MemberOnboardingPage({super.key, required this.gymId, this.prefill});
+  const MemberOnboardingPage({
+    super.key,
+    required this.gymId,
+    this.prefill,
+    this.existing = false,
+  });
   final String? gymId;
+
+  /// Opens on a member who joined before the gym used the app, and every
+  /// fresh form after saving one stays that way.
+  final bool existing;
 
   /// Set when converting an enquiry: fills the form and links the enquiry.
   final LeadPrefill? prefill;
@@ -101,13 +110,15 @@ class MemberOnboardingPage extends ConsumerWidget {
         onConfirm: confirm,
         initialDraft:
             initialDraft ??
-            (prefill == null
-                ? null
-                : OnboardingWizardState(
+            (prefill != null
+                ? OnboardingWizardState(
                     firstName: prefill!.firstName,
                     lastName: prefill!.lastName ?? '',
                     phone: prefill!.phone,
-                  )),
+                  )
+                : existing
+                ? const OnboardingWizardState(existingMember: true)
+                : null),
         correction: correction,
       ),
     );
@@ -439,22 +450,28 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.correction == null
-                              ? 'New member'
-                              : 'Correct registration',
+                          widget.correction != null
+                              ? 'Correct registration'
+                              : _draft.existingMember
+                              ? 'From your register'
+                              : 'New member',
                           style: Theme.of(
                             context,
                           ).textTheme.labelMedium?.copyWith(letterSpacing: 1.6),
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          'Add member',
+                          _draft.existingMember
+                              ? 'Add existing member'
+                              : 'Add member',
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
                           widget.correction?.explanation ??
-                              'Four steps: details, plan, payment, review.',
+                              (_draft.existingMember
+                                  ? 'Their code and details, the plan and the date it started, then what they already paid.'
+                                  : 'Four steps: details, plan, payment, review.'),
                         ),
                         const SizedBox(height: AppSpacing.xl),
                         OnboardingProgress(

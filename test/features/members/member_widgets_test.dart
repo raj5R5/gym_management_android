@@ -366,6 +366,19 @@ void main() {
     );
     expect(find.byKey(const ValueKey('onboarding-step-title')), findsOneWidget);
   });
+  testWidgets('Add existing member opens the form ready for a register entry', (
+    tester,
+  ) async {
+    final scope = await pumpMembers(tester, FakeMemberRepository());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add existing member'));
+    await tester.pumpAndSettle();
+    final uri = scope.read(appRouterProvider).state.uri;
+    expect(uri.path, '${AppRoutes.members}/new');
+    expect(uri.queryParameters['existing'], '1');
+    expect(find.text('Add existing member'), findsOneWidget);
+    expect(find.text('From your register'), findsOneWidget);
+  });
   testWidgets('filter chips query the server and reset to page one', (
     tester,
   ) async {

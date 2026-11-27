@@ -7,7 +7,7 @@ import '../models/onboarding_wizard_state.dart';
 import 'onboarding_payment_step.dart';
 
 const onboardingConfirmationMessage =
-    'Confirm registers the member and any selected membership/payment together. The confirmed result stays saved until you acknowledge it.';
+    'Confirm saves the member, their plan and payment together.';
 
 class OnboardingReviewStep extends StatelessWidget {
   const OnboardingReviewStep({

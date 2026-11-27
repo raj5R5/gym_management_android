@@ -372,7 +372,7 @@ void main() {
         expect(storage.values[onboardingScope().storageKey], encoded);
         container.read(appRouterProvider).pop();
         await tester.pumpAndSettle();
-        await tap(tester, 'Acknowledge registration');
+        await tap(tester, 'Done, add next member');
         expect(storage.values, isEmpty);
         expect(find.byKey(const ValueKey('memberCode')), findsOneWidget);
         expect(repository.calls, hasLength(1));
@@ -663,7 +663,7 @@ void main() {
       final original = saved().encode();
       final acknowledge = tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Acknowledge registration'),
+            find.widgetWithText(FilledButton, 'Done, add next member'),
           )
           .onPressed!;
       container.read(adminGymProvider.notifier).selectGym(gymB);

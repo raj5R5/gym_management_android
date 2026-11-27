@@ -75,6 +75,11 @@ class _MembersListState extends ConsumerState<_MembersList> {
   void _addMember() =>
       context.push('${AppRoutes.members}/new?gymId=${widget.gym.gymId}');
 
+  /// For members already in the gym's paper register.
+  void _addExisting() => context.push(
+    '${AppRoutes.members}/new?gymId=${widget.gym.gymId}&existing=1',
+  );
+
   @override
   Widget build(BuildContext context) {
     final query = ref.watch(memberOverviewQueryProvider);
@@ -136,6 +141,13 @@ class _MembersListState extends ConsumerState<_MembersList> {
                         label: const Text('Add member'),
                       ),
                   ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                // Gyms moving from a paper register enter members one by one.
+                OutlinedButton.icon(
+                  onPressed: _addExisting,
+                  icon: const Icon(Icons.history_edu_outlined),
+                  label: const Text('Add existing member'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 TextField(

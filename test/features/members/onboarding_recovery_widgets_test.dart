@@ -294,7 +294,7 @@ void main() {
         expect(find.text('Alex River'), findsOneWidget);
         expect(repository.calls, isEmpty);
         expect(storage.values[operation.scope.storageKey], operation.encode());
-        await tap(tester, 'Acknowledge registration');
+        await tap(tester, 'Done, add next member');
         expect(storage.values, isEmpty);
         expect(getForm(), findsOneWidget);
         expect(repository.calls, isEmpty);
@@ -761,12 +761,12 @@ void main() {
       save(operation);
       storage.failDelete = true;
       await mount(tester);
-      await tap(tester, 'Acknowledge registration');
+      await tap(tester, 'Done, add next member');
       expect(getForm(), findsNothing);
       expect(find.text('Registration confirmed'), findsOneWidget);
       expect(storage.values[operation.scope.storageKey], operation.encode());
       storage.failDelete = false;
-      await tap(tester, 'Acknowledge registration');
+      await tap(tester, 'Done, add next member');
       expect(getForm(), findsOneWidget);
       expect(repository.calls, isEmpty);
     },
@@ -1002,7 +1002,7 @@ void main() {
       container.read(appRouterProvider).pop();
       await tester.pumpAndSettle();
       expect(find.text('Registration confirmed'), findsOneWidget);
-      expect(find.text('Acknowledge registration'), findsOneWidget);
+      expect(find.text('Done, add next member'), findsOneWidget);
       expect(getForm(), findsNothing);
     },
   );
@@ -1021,7 +1021,7 @@ void main() {
         addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
         save(confirmed(membership: true, amount: 50003));
         await mount(tester);
-        await tap(tester, 'Acknowledge registration');
+        await tap(tester, 'Done, add next member');
         expect(getForm(), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
@@ -1136,7 +1136,7 @@ void main() {
       expect(membersRepository.listCalls.length, greaterThan(memberReads));
       await container.read(dashboardProvider.future);
       expect(dashboardRepository.requests.length, greaterThan(dashboardReads));
-      await tap(tester, 'Acknowledge registration');
+      await tap(tester, 'Done, add next member');
       expect(storage.values.containsKey(original.scope.storageKey), isFalse);
       expect(tester.widget<TextFormField>(getForm()).initialValue, '');
     },
