@@ -513,16 +513,18 @@ class _TodoSection extends ConsumerWidget {
               ],
             )
           else if (page != null)
-            for (final row in page.rows) ...[
-              MemberOverviewTile(
-                row: row,
-                gym: gym,
-                gymName: gymName,
-                compact: true,
-                showVisits: filter == MemberOverviewFilter.inactive,
-              ),
-              if (row != page.rows.last) const SizedBox(height: AppSpacing.sm),
-            ],
+            MemberOverviewList(
+              children: [
+                for (final row in page.rows)
+                  MemberOverviewTile(
+                    row: row,
+                    gym: gym,
+                    gymName: gymName,
+                    compact: true,
+                    showVisits: filter == MemberOverviewFilter.inactive,
+                  ),
+              ],
+            ),
         ],
       ),
     );

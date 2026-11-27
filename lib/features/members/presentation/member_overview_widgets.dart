@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/contact/member_contact.dart';
 import '../../../shared/formatting/inr.dart';
-import '../../../shared/widgets/glass.dart';
+import '../../../shared/widgets/page_section.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../../memberships/presentation/billing_components.dart';
 import '../models/member_overview.dart';
@@ -127,128 +127,151 @@ class MemberOverviewTile extends StatelessWidget {
         : membership == null
         ? 'No membership yet'
         : '${membership.planName} · ${membership.statusLabel}';
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                row.member.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (!compact) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                row.member.memberCode,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          detail,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(color: statusColor),
+        ),
+        if (!compact &&
+            membership != null &&
+            membership.state == OverviewMembershipState.active) ...[
+          const SizedBox(height: AppSpacing.sm),
+          ExcludeSemantics(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: membership.usedFraction,
+                minHeight: 3,
+                color: membership.expiringSoon
+                    ? AppPalette.amber
+                    : theme.colorScheme.primary,
+                backgroundColor: AppPalette.graphite,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+    final contact = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _RoundIcon(
+          tooltip: 'Call ${row.member.firstName}',
+          icon: Icons.call_outlined,
+          onPressed: () => callMember(context, row.member.phone),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        _RoundIcon(
+          tooltip: 'WhatsApp ${row.member.firstName}',
+          icon: Icons.chat_outlined,
+          onPressed: () => whatsappMember(
+            context,
+            row.member.phone,
+            overviewReminder(row, gymName, missedVisits: showVisits),
+          ),
+        ),
+      ],
+    );
+    final next = _ActionPill(row: row, action: action, gym: gym);
+    // Large text or a narrow screen: the actions go under the details.
+    final stacked =
+        MediaQuery.textScalerOf(context).scale(14) / 14 > 1.3 ||
+        MediaQuery.sizeOf(context).width < 340;
     return Semantics(
       container: true,
       label:
           '${row.member.name}, $detail'
           '${row.balancePaise > 0 ? ', ${formatCompactInrPaise(row.balancePaise)} due' : ''}',
-      child: GlassCard(
-        padding: EdgeInsets.zero,
-        radius: AppRadii.lg,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadii.lg),
-          onTap: () =>
-              pushFromCard(context, memberPath(scopeFor(gym, row.member.id))),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    ExcludeSemantics(
-                      child: MemberPhotoAvatar(
-                        member: row.member,
-                        radius: compact ? 18 : 22,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        onTap: () =>
+            pushFromCard(context, memberPath(scopeFor(gym, row.member.id))),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: MemberPhotoAvatar(
+                  member: row.member,
+                  radius: compact ? 18 : 22,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: stacked
+                    ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          info,
+                          const SizedBox(height: AppSpacing.sm),
+                          Wrap(
+                            spacing: AppSpacing.sm,
+                            runSpacing: AppSpacing.xs,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [next, contact],
+                          ),
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: info),
+                          const SizedBox(width: AppSpacing.sm),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  row.member.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              if (!compact)
-                                Text(
-                                  row.member.memberCode,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
+                              next,
+                              const SizedBox(height: AppSpacing.xs),
+                              contact,
                             ],
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            detail,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: statusColor,
-                            ),
-                          ),
-                          if (!compact &&
-                              membership != null &&
-                              membership.state ==
-                                  OverviewMembershipState.active) ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            ExcludeSemantics(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: membership.usedFraction,
-                                  minHeight: 4,
-                                  color: membership.expiringSoon
-                                      ? AppPalette.amber
-                                      : theme.colorScheme.primary,
-                                  backgroundColor: AppPalette.graphite,
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    _RoundIcon(
-                      tooltip: 'Call ${row.member.firstName}',
-                      icon: Icons.call_outlined,
-                      onPressed: () => callMember(context, row.member.phone),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _RoundIcon(
-                      tooltip: 'WhatsApp ${row.member.firstName}',
-                      icon: Icons.chat_outlined,
-                      onPressed: () => whatsappMember(
-                        context,
-                        row.member.phone,
-                        overviewReminder(
-                          row,
-                          gymName,
-                          missedVisits: showVisits,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Align(
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: _ActionPill(row: row, action: action, gym: gym),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Members as rows with a thin line between them, not a card each.
+class MemberOverviewList extends StatelessWidget {
+  const MemberOverviewList({super.key, required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) =>
+      SeparatedRows(indent: 56, children: children);
 }
 
 class _RoundIcon extends StatelessWidget {
@@ -321,6 +344,8 @@ class _ActionPill extends StatelessWidget {
       onPressed: () => openOverviewAction(context, gym, row),
       style: OutlinedButton.styleFrom(
         visualDensity: VisualDensity.compact,
+        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         foregroundColor: danger ? AppPalette.accentLight : null,
         side: BorderSide(
           color: danger

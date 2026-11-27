@@ -204,16 +204,19 @@ class _MembersListState extends ConsumerState<_MembersList> {
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
-                    for (final row in page.rows) ...[
-                      MemberOverviewTile(
-                        row: row,
-                        gym: widget.gym,
-                        gymName: gymName,
-                        showVisits:
-                            query.filter == MemberOverviewFilter.inactive,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                    ],
+                    MemberOverviewList(
+                      children: [
+                        for (final row in page.rows)
+                          MemberOverviewTile(
+                            row: row,
+                            gym: widget.gym,
+                            gymName: gymName,
+                            showVisits:
+                                query.filter == MemberOverviewFilter.inactive,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
                   ],
                   PageControls(
                     page: page.pagination.page,
