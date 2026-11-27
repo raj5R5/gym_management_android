@@ -65,7 +65,7 @@ class _PlansPageState extends ConsumerState<PlansPage> {
             children: [
               Expanded(
                 child: Text(
-                  'Membership Plans',
+                  'Plans',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
@@ -74,12 +74,14 @@ class _PlansPageState extends ConsumerState<PlansPage> {
                 onPressed: refresh,
                 icon: const Icon(Icons.refresh),
               ),
+              FilledButton.icon(
+                onPressed: () => context.push(planPath(gym.gymId)),
+                icon: const Icon(Icons.add),
+                label: const Text('New plan'),
+              ),
             ],
           ),
-          FilledButton(
-            onPressed: () => context.push(planPath(gym.gymId)),
-            child: const Text('Create membership plan'),
-          ),
+          const SizedBox(height: AppSpacing.sm),
           Align(
             alignment: Alignment.centerLeft,
             child: FilterChip(

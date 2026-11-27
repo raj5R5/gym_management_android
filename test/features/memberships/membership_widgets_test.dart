@@ -700,7 +700,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ListTile, 'More'));
     await tester.pumpAndSettle();
-    await tap(tester, find.widgetWithText(OutlinedButton, 'Membership Plans'));
+    await tap(tester, find.text('Membership Plans'));
     expect(find.text('₹1,500.00'), findsOneWidget);
     expect(find.text('≈1'), findsOneWidget);
     expect(find.text('30'), findsOneWidget);
@@ -796,10 +796,7 @@ void main() {
         matching: find.byWidgetPredicate((widget) => widget is TextButton),
       ),
     );
-    await tap(
-      tester,
-      find.widgetWithText(FilledButton, 'Create membership plan'),
-    );
+    await tap(tester, find.text('New plan'));
     await fillPlan(tester);
     billing.failure = const BillingFailure('Duplicate plan name');
     await tap(tester, find.widgetWithText(FilledButton, 'Save plan'));
@@ -900,11 +897,9 @@ void main() {
     await pump(tester);
     await tester.tap(find.text('Plans'));
     await tester.pumpAndSettle();
-    expect(find.text('Membership Plans'), findsOneWidget);
-    await tap(
-      tester,
-      find.widgetWithText(FilledButton, 'Create membership plan'),
-    );
+    // The tab label and the page title.
+    expect(find.text('Plans'), findsNWidgets(2));
+    await tap(tester, find.text('New plan'));
     expect(
       GoRouterState.of(tester.element(find.byType(PlanFormPage))).uri.path,
       '${AppRoutes.plans}/new',
@@ -939,10 +934,7 @@ void main() {
     final reads = billing.operations
         .where((op) => op.startsWith('plans:'))
         .length;
-    await tap(
-      tester,
-      find.widgetWithText(FilledButton, 'Create membership plan'),
-    );
+    await tap(tester, find.text('New plan'));
     await fillPlan(tester);
     await tap(tester, find.widgetWithText(FilledButton, 'Save plan'));
     expect(
@@ -1003,7 +995,8 @@ void main() {
       await pump(tester);
       await tester.tap(find.byType(NavigationDestination).at(3));
       await tester.pumpAndSettle();
-      expect(find.text('Membership Plans'), findsOneWidget);
+      // The tab label and the page title.
+      expect(find.text('Plans'), findsNWidgets(2));
       expect(
         tester
             .widget<NavigationDestination>(

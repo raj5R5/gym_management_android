@@ -162,9 +162,7 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
     expect(repository.listCalls.last.query.search, 'Pat');
-    await tester.tap(find.text('All statuses'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('inactive').last);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Inactive'));
     await tester.pumpAndSettle();
     expect(repository.listCalls.last.query.status, TrainerStatus.inactive);
     expect(repository.listCalls.last.query.page, 1);

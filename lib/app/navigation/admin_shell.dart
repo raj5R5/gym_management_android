@@ -88,13 +88,17 @@ class AdminShell extends ConsumerWidget {
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: Colors.transparent,
-          title: Text(
-            'MUSCLEDESK',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              letterSpacing: 1.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          // The gym being managed is the one header line; with several
+          // branches the picker below names it instead.
+          title: gyms.length > 1
+              ? null
+              : Text(
+                  ownerProfile?.gymName ?? 'Current gym',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
           flexibleSpace: TitaniumGlass(
             radius: 0,
             opacity: AppGlass.navigation(Theme.of(context).brightness),
@@ -195,55 +199,50 @@ class AdminShell extends ConsumerWidget {
           bottom: !showTabs,
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+              if (gyms.length > 1)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: DropdownButtonFormField<String>(
+                    key: gymField,
+                    initialValue: selected.gymId,
+                    decoration: const InputDecoration(labelText: 'Branch'),
+                    isExpanded: true,
+                    items: gyms
+                        .map(
+                          (id) => DropdownMenuItem(
+                            value: id,
+                            child: Text(
+                              // Branch names come from the owner summary;
+                              // the identity contract itself has no names.
+                              branchNames[id] ??
+                                  (memberOverview
+                                      ? 'Gym ${gyms.indexOf(id) + 1}'
+                                      : 'Gym $id'),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (id) async {
+                      if (id == null || id == selected.gymId) return;
+                      final allowed = await ref
+                          .read(formNavigationGuardProvider)
+                          .allowExit();
+                      if (!context.mounted ||
+                          ref.read(adminGymProvider) != selected) {
+                        return;
+                      }
+                      if (allowed) {
+                        ref.read(adminGymProvider.notifier).selectGym(id);
+                      } else {
+                        gymField.currentState?.didChange(selected.gymId);
+                      }
+                    },
+                  ),
                 ),
-                child: gyms.length > 1
-                    ? DropdownButtonFormField<String>(
-                        key: gymField,
-                        initialValue: selected.gymId,
-                        decoration: const InputDecoration(labelText: 'Branch'),
-                        isExpanded: true,
-                        items: gyms
-                            .map(
-                              (id) => DropdownMenuItem(
-                                value: id,
-                                child: Text(
-                                  // Branch names come from the owner summary;
-                                  // the identity contract itself has no names.
-                                  branchNames[id] ??
-                                      (memberOverview
-                                          ? 'Gym ${gyms.indexOf(id) + 1}'
-                                          : 'Gym $id'),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (id) async {
-                          if (id == null || id == selected.gymId) return;
-                          final allowed = await ref
-                              .read(formNavigationGuardProvider)
-                              .allowExit();
-                          if (!context.mounted ||
-                              ref.read(adminGymProvider) != selected) {
-                            return;
-                          }
-                          if (allowed) {
-                            ref.read(adminGymProvider.notifier).selectGym(id);
-                          } else {
-                            gymField.currentState?.didChange(selected.gymId);
-                          }
-                        },
-                      )
-                    : Text(
-                        ownerProfile?.gymName ??
-                            (memberOverview ? 'Current gym' : 'Current gym'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-              ),
               Expanded(
                 child: showTabs
                     ? MediaQuery.removePadding(

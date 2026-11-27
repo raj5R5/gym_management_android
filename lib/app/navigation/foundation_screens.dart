@@ -10,6 +10,7 @@ import '../../features/auth/models/session_state.dart';
 import '../../features/auth/providers/session_controller.dart';
 import '../../shared/widgets/message_page.dart';
 import '../../shared/widgets/brand_mark.dart';
+import '../../shared/widgets/page_section.dart';
 import '../../shared/widgets/profile_section.dart';
 import '../../features/owner_profile/owner_profile_widgets.dart';
 import '../../features/account_privacy/privacy_support_page.dart';
@@ -86,6 +87,9 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
     final name = displayName != null && displayName.isNotEmpty
         ? displayName
         : user?.email;
+    if (embedded && !loggingOut && ref.watch(adminGymProvider) != null) {
+      return _OwnerAccountPage(signedIn: user != null);
+    }
     return MessagePage(
       embedded: embedded,
       alignment: embedded ? Alignment.topCenter : Alignment.center,
@@ -166,6 +170,94 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
             label: const Text('Request account deletion'),
           ),
       ],
+    );
+  }
+}
+
+/// The owner's account page: who is signed in, then the settings rows, with
+/// signing out last and set apart.
+class _OwnerAccountPage extends ConsumerWidget {
+  const _OwnerAccountPage({required this.signedIn});
+  final bool signedIn;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    Widget row(IconData icon, String label, String route) => ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon),
+      title: Text(label),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push(route),
+    );
+    // A short page: build it whole so every action is always reachable.
+    // Its own Material keeps the rows' ink inside this route.
+    return Material(
+      type: MaterialType.transparency,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const OwnerAccountSection(),
+            ProfileSection(
+              title: 'Gym',
+              children: [
+                SeparatedRows(
+                  indent: 40,
+                  children: [
+                    row(
+                      Icons.tune_outlined,
+                      'Gym settings',
+                      AppRoutes.gymSettings,
+                    ),
+                    row(
+                      Icons.card_membership_outlined,
+                      'Membership Plans',
+                      AppRoutes.plans,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            ProfileSection(
+              title: 'Account',
+              children: [
+                SeparatedRows(
+                  indent: 40,
+                  children: [
+                    row(
+                      Icons.policy_outlined,
+                      'Privacy & support',
+                      AppRoutes.privacySupport,
+                    ),
+                    if (signedIn)
+                      row(
+                        Icons.person_remove_outlined,
+                        'Request account deletion',
+                        AppRoutes.accountDeletion,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            FilledButton(
+              style: AppButtonStyles.warning(context),
+              onPressed: !signedIn
+                  ? null
+                  : () async {
+                      try {
+                        await ref
+                            .read(sessionControllerProvider.notifier)
+                            .logout();
+                      } on AuthFailure {
+                        // Cleanup failures are published as safe errors on the login page.
+                      }
+                    },
+              child: const Text('Logout'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

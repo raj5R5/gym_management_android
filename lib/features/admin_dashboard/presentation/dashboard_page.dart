@@ -134,6 +134,24 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               const SizedBox(height: AppSpacing.lg),
               if (gym != null) SetupChecklist(gym: gym, dashboard: dashboard),
               const PendingClaimsBanner(),
+              // The most used actions come first, before the figures.
+              if (gym != null)
+                DashboardQuickActions(
+                  checkIn: () => context.push(AppRoutes.checkIn),
+                  addMember: () => context.push(
+                    '${AppRoutes.members}/new?gymId=${Uri.encodeQueryComponent(gym.gymId)}',
+                  ),
+                  collectDues: () => openMembersFiltered(
+                    context,
+                    ref,
+                    MemberOverviewFilter.dues,
+                  ),
+                  renewals: () => openMembersFiltered(
+                    context,
+                    ref,
+                    MemberOverviewFilter.expired,
+                  ),
+                ),
               DashboardHeader(
                 period: dashboard != null
                     ? '${dashboardDateRangeLabel(dashboard.period.from, dashboard.period.to)} · Inclusive'
@@ -183,23 +201,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               ),
               const SizedBox(height: AppSpacing.lg),
               if (gym != null) ...[
-                DashboardQuickActions(
-                  checkIn: () => context.push(AppRoutes.checkIn),
-                  addMember: () => context.push(
-                    '${AppRoutes.members}/new?gymId=${Uri.encodeQueryComponent(gym.gymId)}',
-                  ),
-                  collectDues: () => openMembersFiltered(
-                    context,
-                    ref,
-                    MemberOverviewFilter.dues,
-                  ),
-                  renewals: () => openMembersFiltered(
-                    context,
-                    ref,
-                    MemberOverviewFilter.expired,
-                  ),
-                  viewPlans: () => context.go(AppRoutes.plans),
-                ),
                 const SizedBox(height: AppSpacing.xl),
                 DashboardTodo(gym: gym),
                 if (dashboard != null) ...[

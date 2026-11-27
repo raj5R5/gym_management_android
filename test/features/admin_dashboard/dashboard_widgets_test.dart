@@ -540,7 +540,7 @@ void main() {
       await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
       expect(repository.requests.last.query.toParameters(), isEmpty);
-      await tester.tap(find.text('Custom range'));
+      await tester.tap(find.text('Custom'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
@@ -705,7 +705,7 @@ void main() {
   testWidgets('date picker opens without a branch selector', (tester) async {
     await pumpAdmin(tester, FakeDashboardRepository());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Custom range'));
+    await tester.tap(find.text('Custom'));
     await tester.pumpAndSettle();
     expect(find.byType(DashboardDateRangeDialog), findsOneWidget);
     expect(find.text('Both dates included · Up to 366 days'), findsOneWidget);
@@ -716,7 +716,7 @@ void main() {
     final repository = FakeDashboardRepository();
     final scope = await pumpAdmin(tester, repository);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Custom range'));
+    await tester.tap(find.text('Custom'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-03-01')));
     await tester.pump();
@@ -755,7 +755,7 @@ void main() {
     final repository = FakeDashboardRepository();
     await pumpAdmin(tester, repository);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Custom range'));
+    await tester.tap(find.text('Custom'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-03-07')));
     await tester.pump();
@@ -797,7 +797,6 @@ void main() {
     'Add member': ('${AppRoutes.members}/new', null),
     'Collect dues': (AppRoutes.members, MemberOverviewFilter.dues),
     'Renewals': (AppRoutes.members, MemberOverviewFilter.expired),
-    'Plans': (AppRoutes.plans, null),
   }.entries) {
     testWidgets('quick action ${action.key} opens the existing route', (
       tester,
@@ -866,6 +865,8 @@ void main() {
         );
       await pumpAdmin(tester, repository);
       await tester.pumpAndSettle();
+      // Quick actions sit above the figures.
+      await reveal(tester, find.text('Add member'));
       await reveal(tester, find.text('Money collected'));
       expect(find.text('₹9,00,71,99,25,47,409.91'), findsOneWidget);
       expect(
@@ -879,7 +880,6 @@ void main() {
       await reveal(tester, find.text('Pending dues'));
       expect(find.text('₹500.00'), findsOneWidget);
       await reveal(tester, find.text('New members'));
-      await reveal(tester, find.text('Add member'));
       expect(tester.takeException(), isNull);
     },
   );

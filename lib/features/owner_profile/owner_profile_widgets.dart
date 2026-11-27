@@ -1,4 +1,3 @@
-import '../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -182,50 +181,69 @@ class OwnerDrawerHeader extends ConsumerWidget {
   }
 }
 
+/// The owner at a glance on the account page: photo, name and contact,
+/// then how complete the profile is and the way to edit it.
 class OwnerAccountSection extends ConsumerWidget {
   const OwnerAccountSection({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final value = ref.watch(ownerProfileProvider);
     final profile = currentOwnerProfile(ref);
     return ProfileSection(
       title: 'Owner profile',
-      icon: Icons.person_outline,
       children: [
         if (profile != null) ...[
+          Row(
+            children: [
+              OwnerPhoto(profile: profile, name: profile.name, size: 64),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.name,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(profile.email, style: theme.textTheme.bodySmall),
+                    if (profile.phone.isNotEmpty)
+                      Text(profile.phone, style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (profile.completed < profile.total)
+            OwnerCompletion(profile: profile),
+          const SizedBox(height: AppSpacing.md),
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: OwnerPhoto(profile: profile, name: profile.name, size: 96),
+            child: OutlinedButton.icon(
+              onPressed: () => context.push(AppRoutes.ownerProfile),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Edit owner profile'),
+            ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(profile.name, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: AppSpacing.xs),
-          IconLabel(profile.email, icon: Icons.email_outlined),
-          const SizedBox(height: AppSpacing.sm),
-          IconLabel(profile.gymName, icon: Icons.fitness_center_outlined),
-          if (profile.phone.isNotEmpty)
-            IconLabel(profile.phone, icon: Icons.phone_outlined),
-          OwnerCompletion(profile: profile),
         ] else if (value.isLoading)
           const LinearProgressIndicator(semanticsLabel: 'Loading owner profile')
-        else
+        else ...[
           Text(
             value.error is OwnerProfileFailure
                 ? (value.error as OwnerProfileFailure).message
                 : 'Profile details are unavailable. Please retry.',
           ),
-        const SizedBox(height: AppSpacing.lg),
-        if (profile != null)
-          FilledButton.icon(
-            onPressed: () => context.push(AppRoutes.ownerProfile),
-            icon: const Icon(Icons.edit_outlined),
-            label: const Text('Edit owner profile'),
-          )
-        else
-          OutlinedButton(
-            onPressed: () => ref.invalidate(ownerProfileProvider),
-            child: const Text('Retry profile'),
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: OutlinedButton(
+              onPressed: () => ref.invalidate(ownerProfileProvider),
+              child: const Text('Retry profile'),
+            ),
           ),
+        ],
       ],
     );
   }

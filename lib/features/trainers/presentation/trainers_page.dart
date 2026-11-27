@@ -1,8 +1,8 @@
-import '../../../shared/widgets/field_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../data/trainer_failure.dart';
 import '../models/trainer_models.dart';
@@ -74,7 +74,7 @@ class _TrainersListState extends ConsumerState<_TrainersList> {
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
+            spacing: AppSpacing.md,
             children: [
               Text(
                 'Trainers',
@@ -117,23 +117,28 @@ class _TrainersListState extends ConsumerState<_TrainersList> {
             },
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<TrainerStatus?>(
-            itemHeight: null,
-            isExpanded: true,
-            key: ValueKey(query.status),
-            initialValue: query.status,
-            decoration: const InputDecoration(
-              prefixIcon: FieldIcon('status'),
-              labelText: 'Trainer status',
+          // One tap filters; a dropdown hid the choices behind a field.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final status in <TrainerStatus?>[
+                  null,
+                  ...TrainerStatus.values,
+                ]) ...[
+                  ChoiceChip(
+                    label: Text(
+                      status == null
+                          ? 'All'
+                          : '${status.name[0].toUpperCase()}${status.name.substring(1)}',
+                    ),
+                    selected: query.status == status,
+                    onSelected: (_) => _apply(status),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
+              ],
             ),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All statuses')),
-              ...TrainerStatus.values.map(
-                (status) =>
-                    DropdownMenuItem(value: status, child: Text(status.name)),
-              ),
-            ],
-            onChanged: _apply,
           ),
           const SizedBox(height: 16),
           if (state.isLoading)

@@ -120,21 +120,24 @@ class _PtPageState extends ConsumerState<PtPage> {
     final all = state.asData?.value;
     final rows = all == null ? null : filterPtPackages(all, _filter);
     return [
-      Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.xs,
-        children: [
-          for (final filter in PtListFilter.values)
-            ChoiceChip(
-              label: Text(
-                all == null
-                    ? filter.label
-                    : '${filter.label} ${filterPtPackages(all, filter).length}',
+      // One scrolling row of filters instead of two wrapped lines.
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          spacing: AppSpacing.sm,
+          children: [
+            for (final filter in PtListFilter.values)
+              ChoiceChip(
+                label: Text(
+                  all == null
+                      ? filter.label
+                      : '${filter.label} ${filterPtPackages(all, filter).length}',
+                ),
+                selected: _filter == filter,
+                onSelected: (_) => setState(() => _filter = filter),
               ),
-              selected: _filter == filter,
-              onSelected: (_) => setState(() => _filter = filter),
-            ),
-        ],
+          ],
+        ),
       ),
       const SizedBox(height: AppSpacing.md),
       if (state.hasError && rows == null)
@@ -197,16 +200,19 @@ class _PtPageState extends ConsumerState<PtPage> {
     final rates = ref.watch(commissionRatesProvider);
     final data = report.asData?.value;
     return [
-      Wrap(
-        spacing: AppSpacing.sm,
-        children: [
-          for (final period in CommissionPeriod.values)
-            ChoiceChip(
-              label: Text(period.label),
-              selected: _period == period,
-              onSelected: (_) => setState(() => _period = period),
-            ),
-        ],
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          spacing: AppSpacing.sm,
+          children: [
+            for (final period in CommissionPeriod.values)
+              ChoiceChip(
+                label: Text(period.label),
+                selected: _period == period,
+                onSelected: (_) => setState(() => _period = period),
+              ),
+          ],
+        ),
       ),
       const SizedBox(height: AppSpacing.md),
       if (report.hasError && data == null)

@@ -4,6 +4,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../shared/widgets/soft_panel.dart';
 import '../models/dashboard_models.dart';
 import '../../../shared/widgets/page_section.dart';
+import '../../../shared/widgets/round_action.dart';
 
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
@@ -41,7 +42,7 @@ class DashboardHeader extends StatelessWidget {
                   DashboardDateFilter.today: 'Today',
                   DashboardDateFilter.last7Days: '7 days',
                   DashboardDateFilter.thisMonth: 'This month',
-                  DashboardDateFilter.customRange: 'Custom range',
+                  DashboardDateFilter.customRange: 'Custom',
                 }.entries)
                   ChoiceChip(
                     label: Text(entry.value),
@@ -249,48 +250,30 @@ class DashboardQuickActions extends StatelessWidget {
     required this.addMember,
     required this.collectDues,
     required this.renewals,
-    required this.viewPlans,
   });
-  final VoidCallback checkIn, addMember, collectDues, renewals, viewPlans;
+  final VoidCallback checkIn, addMember, collectDues, renewals;
 
   @override
   Widget build(BuildContext context) => PlainBlock(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Quick actions', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: AppSpacing.sm),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.xs,
-          children: [
-            FilledButton.icon(
-              onPressed: checkIn,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Check in'),
-            ),
-            OutlinedButton.icon(
-              onPressed: addMember,
-              icon: const Icon(Icons.person_add_outlined),
-              label: const Text('Add member'),
-            ),
-            OutlinedButton.icon(
-              onPressed: collectDues,
-              icon: const Icon(Icons.payments_outlined),
-              label: const Text('Collect dues'),
-            ),
-            OutlinedButton.icon(
-              onPressed: renewals,
-              icon: const Icon(Icons.autorenew),
-              label: const Text('Renewals'),
-            ),
-            TextButton.icon(
-              onPressed: viewPlans,
-              icon: const Icon(Icons.card_membership_outlined),
-              label: const Text('Plans'),
-            ),
-          ],
+    child: RoundActionRow(
+      actions: [
+        RoundAction(
+          icon: Icons.qr_code_scanner,
+          label: 'Check in',
+          primary: true,
+          onTap: checkIn,
         ),
+        RoundAction(
+          icon: Icons.person_add_outlined,
+          label: 'Add member',
+          onTap: addMember,
+        ),
+        RoundAction(
+          icon: Icons.payments_outlined,
+          label: 'Collect dues',
+          onTap: collectDues,
+        ),
+        RoundAction(icon: Icons.autorenew, label: 'Renewals', onTap: renewals),
       ],
     ),
   );
