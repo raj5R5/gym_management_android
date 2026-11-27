@@ -285,8 +285,9 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
           validator: validateMemberBirthDate,
         ),
         const SizedBox(height: AppSpacing.sm),
-        const Text(
-          'Adult members only. Under-18 registration is unavailable until guardian authorization and verification are supported. Photos remain optional.',
+        Text(
+          'Members must be 18 or older.',
+          style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: AppSpacing.lg),
         DropdownButtonFormField<String>(
@@ -419,8 +420,8 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
                       children: [
                         Text(
                           widget.correction == null
-                              ? 'NEW MEMBER'
-                              : 'CORRECT REGISTRATION',
+                              ? 'New member'
+                              : 'Correct registration',
                           style: Theme.of(
                             context,
                           ).textTheme.labelMedium?.copyWith(letterSpacing: 1.6),
@@ -433,7 +434,7 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
                         const SizedBox(height: AppSpacing.sm),
                         Text(
                           widget.correction?.explanation ??
-                              'Review all details before confirming registration.',
+                              'Four steps: details, plan, payment, review.',
                         ),
                         const SizedBox(height: AppSpacing.xl),
                         OnboardingProgress(

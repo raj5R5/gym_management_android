@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../app/router/app_routes.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../shared/contact/member_contact.dart';
-import '../../shared/widgets/glass.dart';
 import '../admin_dashboard/providers/dashboard_providers.dart';
 import '../members/presentation/member_components.dart';
 import '../members/providers/member_providers.dart';
@@ -13,6 +12,7 @@ import '../owner_profile/owner_profile.dart';
 import 'lead_widgets.dart';
 import 'leads.dart';
 import '../../shared/widgets/confirm_dialog.dart';
+import '../../shared/widgets/round_action.dart';
 
 class LeadDetailPage extends ConsumerStatefulWidget {
   const LeadDetailPage({super.key, required this.leadId});
@@ -143,61 +143,80 @@ class _LeadDetailPageState extends ConsumerState<LeadDetailPage> {
             ),
           ],
         ),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        // Who and where the enquiry stands.
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(lead.phone, style: theme.textTheme.bodyMedium),
+            Chip(label: Text(lead.status.label)),
+            Chip(label: Text(lead.source.label)),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        RoundActionRow(
+          actions: [
+            RoundAction(
+              icon: Icons.call_outlined,
+              label: 'Call',
+              onTap: () => callMember(context, lead.phone),
+            ),
+            RoundAction(
+              icon: Icons.chat_outlined,
+              label: 'WhatsApp',
+              onTap: () => whatsappMember(
+                context,
+                lead.phone,
+                leadMessage(lead, gymName),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        // The one thing to know now: when to follow up.
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            color: lead.followUpDue ? AppPalette.amberWash : AppColors.glass,
+            borderRadius: BorderRadius.circular(AppRadii.lg),
+          ),
+          child: Row(
             children: [
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.xs,
-                children: [
-                  Chip(label: Text(lead.status.label)),
-                  Chip(label: Text(lead.source.label)),
-                ],
+              Icon(
+                Icons.event_repeat_outlined,
+                color: lead.followUpDue ? AppPalette.amber : null,
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(lead.phone, style: theme.textTheme.titleMedium),
-              Text(
-                followUpLabel(lead, DateTime.now()),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: lead.followUpDue ? AppPalette.amber : null,
-                ),
-              ),
-              if (lead.trialStartDate != null && lead.trialEndDate != null)
-                Text(
-                  'Trial ${shortDay(lead.trialStartDate!)} – '
-                  '${shortDay(lead.trialEndDate!.subtract(const Duration(days: 1)))}'
-                  '${lead.trialActive ? ' · on now' : ''}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              if (lead.referredBy != null)
-                Text(
-                  'Referred by ${lead.referredBy!.name}',
-                  style: theme.textTheme.bodySmall,
-                ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => callMember(context, lead.phone),
-                      icon: const Icon(Icons.call_outlined),
-                      label: const Text('Call'),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => whatsappMember(
-                        context,
-                        lead.phone,
-                        leadMessage(lead, gymName),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      followUpLabel(lead, DateTime.now()),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: lead.followUpDue ? AppPalette.amber : null,
                       ),
-                      icon: const Icon(Icons.chat_outlined),
-                      label: const Text('WhatsApp'),
                     ),
-                  ),
-                ],
+                    if (lead.trialStartDate != null &&
+                        lead.trialEndDate != null)
+                      Text(
+                        'Trial ${shortDay(lead.trialStartDate!)} – '
+                        '${shortDay(lead.trialEndDate!.subtract(const Duration(days: 1)))}'
+                        '${lead.trialActive ? ' · on now' : ''}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    if (lead.referredBy != null)
+                      Text(
+                        'Referred by ${lead.referredBy!.name}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                  ],
+                ),
               ),
             ],
           ),

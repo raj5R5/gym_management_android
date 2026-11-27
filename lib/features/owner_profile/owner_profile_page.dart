@@ -223,7 +223,7 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
-                          'OWNER PROFILE',
+                          'Owner profile',
                           style: Theme.of(context).textTheme.headlineMedium,
                         ),
                       ),

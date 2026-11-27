@@ -173,18 +173,19 @@ class MembershipAtAGlance extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // The status drops under the name when large text needs the room.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.xs,
           children: [
-            Expanded(
-              child: Text(
-                membership.planName,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            Text(
+              membership.planName,
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
             Semantics(
               label: 'Membership status',
               child: MembershipStatusPill(membership: membership),
@@ -373,6 +374,7 @@ class BillRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
+            flex: 3,
             child: Text(
               label,
               style: total
@@ -383,10 +385,18 @@ class BillRow extends StatelessWidget {
             ),
           ),
           if (trailing != null) ...[
-            trailing!,
+            Flexible(child: trailing!),
             const SizedBox(width: AppSpacing.sm),
           ],
-          amount,
+          // Right-aligned; on a narrow phone with large text the amount
+          // shrinks rather than clipping.
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: FittedBox(fit: BoxFit.scaleDown, child: amount),
+            ),
+          ),
         ],
       ),
     );

@@ -1,4 +1,3 @@
-import '../../../shared/widgets/icon_label.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,8 +13,9 @@ import '../../members/presentation/member_components.dart';
 import '../../members/providers/member_providers.dart';
 import '../providers/payment_providers.dart';
 import 'billing_components.dart';
-import 'payment_transaction_details.dart';
 import '../data/payment_repository.dart';
+import '../../../shared/widgets/page_section.dart';
+import '../../../shared/formatting/payment_date.dart';
 
 class RevenueDetailsPage extends ConsumerStatefulWidget {
   const RevenueDetailsPage({
@@ -102,9 +102,12 @@ class _RevenueDetailsPageState extends ConsumerState<RevenueDetailsPage> {
             ],
           ),
           Text(
-            '${dashboardDateRangeLabel(CalendarDate.parse(widget.from!), CalendarDate.parse(widget.to!))} · Inclusive',
+            dashboardDateRangeLabel(
+              CalendarDate.parse(widget.from!),
+              CalendarDate.parse(widget.to!),
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          const Text('Successful payments only'),
           const SizedBox(height: AppSpacing.lg),
           if (data != null && (result.isLoading || result.hasError))
             FinancialRefreshStatus(
@@ -141,45 +144,37 @@ class _RevenueDetailsPageState extends ConsumerState<RevenueDetailsPage> {
                     ),
                   ),
                   Text(
-                    '${data.count} successful ${data.count == 1 ? 'payment' : 'payments'}',
+                    'From ${data.count} ${data.count == 1 ? 'payment' : 'payments'} · times in gym time',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  IconLabel(
-                    'Gym timezone: ${data.period.timezone}',
-                    icon: Icons.schedule,
-                  ),
-                  const Text('The date range follows the gym timezone.'),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
             if (data.transactions.isEmpty)
               const Text('No payments during this period.'),
-            for (final transaction in data.transactions) ...[
-              SoftPanel(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextButton(
-                      onPressed: () => context.push(
-                        memberPath(scopeFor(gym, transaction.member.id)),
+            SeparatedRows(
+              children: [
+                for (final transaction in data.transactions)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    onTap: () => context.push(
+                      memberPath(scopeFor(gym, transaction.member.id)),
+                    ),
+                    title: Text(transaction.member.name),
+                    subtitle: Text(
+                      '${transaction.payment.method.label} · '
+                      '${formatPaymentDateTime(MaterialLocalizations.of(context), transaction.payment.paidAt, timezone: data.period.timezone, showZone: false)}',
+                    ),
+                    trailing: Text(
+                      formatInrPaise(transaction.payment.amountPaise),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                      child: Text(transaction.member.name),
                     ),
-                    IconLabel(
-                      'Member code: ${transaction.member.memberCode}',
-                      icon: Icons.badge_outlined,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    PaymentTransactionDetails(
-                      payment: transaction.payment,
-                      timezone: data.period.timezone,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
+                  ),
+              ],
+            ),
             PageControls(
               page: data.pagination.page,
               total: data.pagination.total,

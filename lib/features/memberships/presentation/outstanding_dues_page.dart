@@ -1,5 +1,3 @@
-import '../../../shared/widgets/field_icon.dart';
-import '../../../shared/widgets/titanium_surface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +6,6 @@ import '../../../app/router/app_routes.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
 import '../../../shared/widgets/soft_panel.dart';
-import '../../../shared/widgets/membership_date_range.dart';
 import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../../members/presentation/member_components.dart';
 import '../../members/presentation/member_list_widgets.dart';
@@ -18,6 +15,7 @@ import '../../members/photos/member_photo_widgets.dart';
 import '../providers/payment_providers.dart';
 import 'billing_components.dart';
 import '../data/outstanding_dues_repository.dart';
+import '../../../shared/widgets/page_section.dart';
 
 class OutstandingDuesPage extends ConsumerStatefulWidget {
   const OutstandingDuesPage({super.key, required this.gymId});
@@ -90,8 +88,9 @@ class _OutstandingDuesPageState extends ConsumerState<OutstandingDuesPage> {
               ),
             ],
           ),
-          const Text(
-            'Current unpaid membership balances\nIndependent of the selected revenue period.',
+          Text(
+            'Everyone who owes money now, whatever the dashboard period.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: AppSpacing.lg),
           if (data != null) ...[
@@ -110,22 +109,21 @@ class _OutstandingDuesPageState extends ConsumerState<OutstandingDuesPage> {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          DropdownButtonFormField<bool>(
-            initialValue: _highestFirst,
-            isExpanded: true,
-            itemHeight: null,
-            decoration: const InputDecoration(
-              prefixIcon: FieldIcon('sort'),
-              labelText: 'Sort members',
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: true,
-                child: Text('Highest balance first'),
+          // One tap sorts; both choices stay visible.
+          Row(
+            spacing: AppSpacing.sm,
+            children: [
+              ChoiceChip(
+                label: const Text('Highest due'),
+                selected: _highestFirst,
+                onSelected: (_) => setState(() => _highestFirst = true),
               ),
-              DropdownMenuItem(value: false, child: Text('Name A–Z')),
+              ChoiceChip(
+                label: const Text('Name A–Z'),
+                selected: !_highestFirst,
+                onSelected: (_) => setState(() => _highestFirst = false),
+              ),
             ],
-            onChanged: (value) => setState(() => _highestFirst = value!),
           ),
           const SizedBox(height: AppSpacing.lg),
           if (data != null && (dues.isLoading || dues.hasError))
@@ -150,7 +148,8 @@ class _OutstandingDuesPageState extends ConsumerState<OutstandingDuesPage> {
               )
             else if (data.search(_search.text).isEmpty)
               const Text('No members match your search.'),
-            ResponsiveMemberGrid(
+            SeparatedRows(
+              indent: 56,
               children: [
                 for (final row in data.search(
                   _search.text,
@@ -249,6 +248,7 @@ class _DuesSummary extends StatelessWidget {
   }
 }
 
+/// A member who owes money, as one row: who, how much, and the plan.
 class _OutstandingMemberCard extends StatelessWidget {
   const _OutstandingMemberCard({
     super.key,
@@ -271,93 +271,71 @@ class _OutstandingMemberCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dates = MaterialLocalizations.of(context);
     final membership = _displayedMembership;
     final count = row.memberships.length;
     final membershipCount =
         '$count unpaid ${count == 1 ? 'membership' : 'memberships'}';
-    final color = AppSurfaces.of(context).memberCard(
-      membership?.status == 'expired'
-          ? MemberCardTone.expired
-          : MemberCardTone.due,
-      theme.brightness,
-    );
+    final plan = membership == null
+        ? 'Membership dates unavailable'
+        : membership.status == 'expired'
+        ? '${membership.planName} · expired ${dates.formatShortMonthDay(membership.endDate.value)}'
+        : membership.currentlyActive
+        ? '${membership.planName} · ends ${dates.formatShortMonthDay(membership.endDate.value)}'
+        : '${membership.planName} · ${membershipStatusLabel(membership)}';
     return Semantics(
       button: true,
       label:
           'View profile for ${row.member.name}. Member code: ${row.member.memberCode}. Total dues across $membershipCount.',
-      child: TitaniumPress(
-        child: Card(
-          color: color,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onView,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                MemberPhotoAvatar.cover(member: row.member, height: 168),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(row.member.name, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Member code: ${row.member.memberCode}',
-                        style: theme.textTheme.bodySmall,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onView,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+          child: Row(
+            children: [
+              MemberPhotoAvatar(member: row.member, radius: 22),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      row.member.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        '${formatCompactInrPaise(row.balancePaise)} due',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: PendingColors.accentFor(theme.brightness),
-                        ),
+                    ),
+                    Text(
+                      plan,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: membership?.status == 'expired'
+                            ? AppPalette.accentLight
+                            : null,
                       ),
-                      const SizedBox(height: AppSpacing.xs),
+                    ),
+                    if (count > 1)
                       Text(
                         'Total across $membershipCount',
                         style: theme.textTheme.bodySmall,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      if (membership == null)
-                        const Text('Membership dates unavailable')
-                      else ...[
-                        Text(
-                          membership.currentlyActive
-                              ? 'Current membership dates'
-                              : membership.status == 'expired'
-                              ? 'Latest expired membership dates'
-                              : 'Upcoming membership dates',
-                          style: theme.textTheme.labelMedium,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        MembershipDateRange(
-                          start: membership.startDate.value,
-                          end: membership.endDate.value,
-                          previous: membership.status == 'expired',
-                        ),
-                        if (membership.status == 'expired') ...[
-                          const SizedBox(height: AppSpacing.sm),
-                          const StatusPill(
-                            label: 'Expired',
-                            tone: AppTone.expired,
-                          ),
-                        ] else if (!membership.currentlyActive) ...[
-                          const SizedBox(height: AppSpacing.sm),
-                          StatusPill(
-                            label: membershipStatusLabel(membership),
-                            tone: AppTone.plan,
-                          ),
-                        ],
-                      ],
-                    ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                formatCompactInrPaise(row.balancePaise),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: PendingColors.accentFor(theme.brightness),
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
         ),
       ),

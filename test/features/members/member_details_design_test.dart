@@ -350,17 +350,17 @@ void main() {
         ..['planNameSnapshot'] = 'Older plan',
     ];
     await mount(tester);
-    await reveal(tester, find.text('Fully Paid'));
-    expect(
-      find.descendant(of: currentCard(), matching: find.text('Fully Paid')),
-      findsOneWidget,
-    );
     // The top line never hides older debt behind a paid current plan.
     expect(
       find.descendant(
         of: find.byType(MemberStatusLine),
         matching: find.text('₹700.00 due'),
       ),
+      findsOneWidget,
+    );
+    await reveal(tester, find.text('Fully Paid'));
+    expect(
+      find.descendant(of: currentCard(), matching: find.text('Fully Paid')),
       findsOneWidget,
     );
     expect(find.textContaining('from older plans'), findsOneWidget);

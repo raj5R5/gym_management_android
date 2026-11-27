@@ -327,8 +327,9 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
                   validator: validateMemberBirthDate,
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                const Text(
-                  'Adult members only. Under-18 profile changes are unavailable until guardian authorization and verification are supported. Existing membership and payment history remains available.',
+                Text(
+                  'Members must be 18 or older.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 DropdownButtonFormField<String?>(

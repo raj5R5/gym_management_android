@@ -9,7 +9,6 @@ import '../../admin_dashboard/providers/dashboard_providers.dart';
 import '../../members/models/member_models.dart';
 import '../../members/providers/member_providers.dart';
 import '../../members/presentation/member_components.dart';
-import '../../../shared/formatting/inr.dart';
 import '../../../shared/formatting/payment_date.dart';
 import '../data/billing_failure.dart';
 import '../models/billing_models.dart';
@@ -20,6 +19,9 @@ import 'record_payment_sheet.dart';
 import 'renewal_confirmation_sheet.dart';
 import 'cancellation_confirmation_sheet.dart';
 import '../providers/renewal_providers.dart';
+import '../../../shared/widgets/glass.dart';
+import '../../members/presentation/member_details_financial_cards.dart';
+import '../../../app/theme/design_tokens.dart';
 
 class MembershipDetailPage extends ConsumerStatefulWidget {
   const MembershipDetailPage({
@@ -129,33 +131,42 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
               retry: () => ref.invalidate(membershipDetailProvider(request)),
             )
           else if (detail.asData?.value case final MembershipDetail data) ...[
-            ProfileSection(
-              title: 'Plan & balance',
-              icon: Icons.card_membership_outlined,
-              children: [
-                membershipText(data.subscription),
-                IconLabel(
-                  'Successful paid: ${formatInrPaise(data.payments.paidPaise)}',
-                  icon: Icons.payments_outlined,
-                ),
-                IconLabel(
-                  'Balance: ${formatInrPaise(data.payments.balancePaise)}',
-                  icon: Icons.account_balance_wallet_outlined,
-                ),
-                if (data.subscription.cancelledAt != null)
-                  IconLabel(
-                    'Cancelled: ${formatPaymentDateTime(MaterialLocalizations.of(context), data.subscription.cancelledAt!, timezone: timezone)}',
-                    icon: Icons.event_busy_outlined,
+            GlassCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  MembershipAtAGlance(membership: data.subscription),
+                  const SizedBox(height: AppSpacing.md),
+                  BillRow(
+                    label: 'Plan price',
+                    amountPaise: data.subscription.pricePaise,
                   ),
-                if (data.subscription.cancellationReason != null)
-                  IconLabel(
-                    'Reason: ${data.subscription.cancellationReason}',
-                    icon: Icons.notes_outlined,
+                  BillRow(label: 'Paid', amountPaise: data.payments.paidPaise),
+                  const Divider(height: AppSpacing.lg),
+                  BillRow(
+                    label: 'Balance',
+                    amountPaise: data.payments.balancePaise,
+                    total: true,
+                    color: data.payments.balancePaise > 0
+                        ? AppPalette.accentLight
+                        : null,
                   ),
-                if (data.subscription.previousId != null)
-                  const Text('Renewal of a previous membership.'),
-              ],
+                  if (data.subscription.cancelledAt != null)
+                    IconLabel(
+                      'Cancelled: ${formatPaymentDateTime(MaterialLocalizations.of(context), data.subscription.cancelledAt!, timezone: timezone)}',
+                      icon: Icons.event_busy_outlined,
+                    ),
+                  if (data.subscription.cancellationReason != null)
+                    IconLabel(
+                      'Reason: ${data.subscription.cancellationReason}',
+                      icon: Icons.notes_outlined,
+                    ),
+                  if (data.subscription.previousId != null)
+                    const Text('Renewal of a previous membership.'),
+                ],
+              ),
             ),
+            const SizedBox(height: AppSpacing.md),
             if (mutation.hasError) BillingError(error: mutation.error),
             if (blocked)
               OutlinedButton(
@@ -226,29 +237,9 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
                   icon: const Icon(Icons.qr_code_2),
                   label: const Text('Collect by UPI'),
                 ),
-              OutlinedButton(
-                onPressed: busy || blocked
-                    ? null
-                    : () async {
-                        ref.invalidate(memberProfileProvider(scope));
-                        ref.invalidate(membershipDetailProvider(request));
-                        final result = await showCancellationConfirmation(
-                          context,
-                          request,
-                        );
-                        if (!mounted ||
-                            !matchesScope(ref.read(adminGymProvider), scope) ||
-                            result == null) {
-                          return;
-                        }
-                        setState(() => _result = result);
-                        if (_scroll.hasClients) {
-                          _scroll.jumpTo(0);
-                        }
-                      },
-                child: const Text('Cancel membership'),
-              ),
-              FilledButton(
+              _ActionButton(
+                // One main action: collecting comes first while money is owed.
+                primary: data.payments.balancePaise == 0 || savedPayment,
                 onPressed: busy || blocked
                     ? null
                     : () async {
@@ -275,14 +266,57 @@ class _MembershipDetailPageState extends ConsumerState<MembershipDetailPage> {
               ),
             ],
             // Less frequent adjustments sit below the main payment actions.
-            if (data.subscription.status != 'cancelled')
+            if (data.subscription.status != 'cancelled') ...[
               MembershipAdjustmentsCard(
                 scope: scope,
                 subscriptionId: widget.subscriptionId,
               ),
+              // Rare and final: last, quiet, and red.
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppPalette.accentLight,
+                ),
+                onPressed: busy || blocked
+                    ? null
+                    : () async {
+                        ref.invalidate(memberProfileProvider(scope));
+                        ref.invalidate(membershipDetailProvider(request));
+                        final result = await showCancellationConfirmation(
+                          context,
+                          request,
+                        );
+                        if (!mounted ||
+                            !matchesScope(ref.read(adminGymProvider), scope) ||
+                            result == null) {
+                          return;
+                        }
+                        setState(() => _result = result);
+                        if (_scroll.hasClients) {
+                          _scroll.jumpTo(0);
+                        }
+                      },
+                child: const Text('Cancel membership'),
+              ),
+            ],
           ],
         ],
       ),
     );
   }
+}
+
+/// Filled for the screen's main action, outlined otherwise.
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.primary,
+    required this.onPressed,
+    required this.child,
+  });
+  final bool primary;
+  final VoidCallback? onPressed;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => primary
+      ? FilledButton(onPressed: onPressed, child: child)
+      : OutlinedButton(onPressed: onPressed, child: child);
 }

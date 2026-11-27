@@ -318,7 +318,7 @@ class MemberPhotoEditor extends ConsumerWidget {
       subtitle: target.isOwner
           ? 'Optional · Photo saves separately from profile details'
           : target.memberId == null
-          ? 'Optional · Uploads after registration is confirmed'
+          ? 'Optional · uploads after you confirm'
           : 'Optional · Photo saves separately from member details',
       children: [
         if (value.hasError) ...[
@@ -399,7 +399,7 @@ class MemberPhotoEditor extends ConsumerWidget {
                     if (!target.canUpload) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Your selection is saved on this device. You can finish the upload later if needed.',
+                        'You can finish the upload later.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],

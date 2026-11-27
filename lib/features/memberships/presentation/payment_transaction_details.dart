@@ -75,3 +75,58 @@ class PaymentTransactionDetails extends StatelessWidget {
     );
   }
 }
+
+/// A payment as one list row: amount, how and when, and its receipt.
+class PaymentRow extends StatelessWidget {
+  const PaymentRow({
+    super.key,
+    required this.payment,
+    this.timezone,
+    this.onTap,
+    this.onReceipt,
+  });
+  final RecordedPayment payment;
+  final String? timezone;
+  final VoidCallback? onTap, onReceipt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final failed = payment.status != 'succeeded';
+    final when = formatPaymentDateTime(
+      MaterialLocalizations.of(context),
+      payment.paidAt,
+      timezone: timezone,
+      showZone: false,
+    );
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: onTap,
+      leading: Icon(
+        failed ? Icons.error_outline : Icons.check_circle_outline,
+        color: failed ? AppPalette.accentLight : null,
+      ),
+      title: Text(
+        formatInrPaise(payment.amountPaise),
+        style: theme.textTheme.titleMedium?.copyWith(
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+      subtitle: Text(
+        [
+          payment.method.label,
+          when,
+          if (failed) payment.status,
+          if (payment.reference case final reference?) 'Ref $reference',
+        ].join(' · '),
+      ),
+      trailing: onReceipt == null
+          ? null
+          : IconButton(
+              tooltip: 'Share receipt',
+              onPressed: onReceipt,
+              icon: const Icon(Icons.receipt_long_outlined),
+            ),
+    );
+  }
+}

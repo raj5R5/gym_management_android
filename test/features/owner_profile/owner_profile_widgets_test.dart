@@ -143,7 +143,7 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         await pump(tester, ProfilesFake(), brightness: brightness, scale: 2);
-        expect(find.text('OWNER PROFILE'), findsOneWidget);
+        expect(find.text('Owner profile'), findsOneWidget);
         await tester.ensureVisible(
           find.byKey(const ValueKey('profile-gymContactEmail')),
         );
