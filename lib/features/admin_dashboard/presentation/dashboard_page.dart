@@ -132,7 +132,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             children: [
               const DashboardGreeting(),
               const SizedBox(height: AppSpacing.lg),
-              if (gym != null) SetupChecklist(gym: gym, dashboard: dashboard),
               const PendingClaimsBanner(),
               // The most used actions come first, before the figures.
               if (gym != null)

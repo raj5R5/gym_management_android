@@ -35,6 +35,7 @@ import '../../features/owner_profile/owner_profile_page.dart';
 import '../../features/auth/models/auth_models.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/auth/presentation/phone_sign_in_page.dart';
 import '../../features/auth/presentation/owner_signup_page.dart';
 import '../../features/auth/presentation/password_recovery_page.dart';
 import '../../features/account_privacy/privacy_support_page.dart';
@@ -86,11 +87,14 @@ String? appRedirect(SessionState current, String path) {
   } else if (current is SessionError && current.canRetryRestoration) {
     // Keep a recoverable startup failure separate from an invalid session.
     // Signing in remains an explicit alternative to retrying restoration.
-    target = path == AppRoutes.login ? null : AppRoutes.startup;
+    target = path == AppRoutes.login || path == AppRoutes.welcome
+        ? null
+        : AppRoutes.startup;
   } else if (current is SessionAuthenticated) {
     if (path == '/' ||
         path == AppRoutes.startup ||
         path == AppRoutes.login ||
+        path == AppRoutes.welcome ||
         path == AppRoutes.signup ||
         (path == AppRoutes.home && isAdmin)) {
       target = isAdmin ? AppRoutes.dashboard : AppRoutes.home;
@@ -102,7 +106,7 @@ String? appRedirect(SessionState current, String path) {
         path == AppRoutes.home ||
         path == AppRoutes.accountDeletion ||
         adminPath) {
-      target = AppRoutes.login;
+      target = AppRoutes.welcome;
     }
   }
   return target == path ? null : target;
@@ -146,6 +150,10 @@ GoRouter createAppRouter({
       GoRoute(
         path: AppRoutes.startup,
         builder: (_, _) => const StartupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.welcome,
+        builder: (_, _) => const PhoneSignInPage(),
       ),
       GoRoute(
         path: AppRoutes.login,

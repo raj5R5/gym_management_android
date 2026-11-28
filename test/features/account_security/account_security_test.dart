@@ -10,17 +10,25 @@ import 'package:gym_management_app/features/auth/models/session_state.dart';
 import 'package:gym_management_app/features/auth/providers/session_controller.dart';
 
 class _Session extends SessionController {
-  _Session(this.verified);
-  final bool verified;
+  _Session(this.verified, {this.phoneOnly = false});
+  final bool verified, phoneOnly;
   @override
   SessionState build() => SessionAuthenticated(
     AuthIdentity(
-      user: AuthUser(
-        id: 'u1',
-        email: 'owner@example.com',
-        status: AccountStatus.active,
-        emailVerified: verified,
-      ),
+      user: phoneOnly
+          ? const AuthUser(
+              id: 'u1',
+              status: AccountStatus.active,
+              phone: '+919876543210',
+              phoneVerified: true,
+              hasPassword: false,
+            )
+          : AuthUser(
+              id: 'u1',
+              email: 'owner@example.com',
+              status: AccountStatus.active,
+              emailVerified: verified,
+            ),
       gymAccess: const [],
     ),
   );
@@ -43,6 +51,12 @@ class _Repository extends AccountSecurityRepository {
         'lastUsedAt': '2026-11-27T10:00:00Z',
       }),
   ];
+  @override
+  Future<void> requestPhoneCode(String digits) async =>
+      calls.add('phone:$digits');
+  @override
+  Future<void> confirmPhone(String digits, String code) async =>
+      calls.add('confirm-phone:$digits:$code');
   @override
   Future<void> sendVerification() async => calls.add('send');
   @override
@@ -70,13 +84,19 @@ class _Repository extends AccountSecurityRepository {
 }
 
 void main() {
-  Future<_Repository> pump(WidgetTester tester, {bool verified = false}) async {
+  Future<_Repository> pump(
+    WidgetTester tester, {
+    bool verified = false,
+    bool phoneOnly = false,
+  }) async {
     final repository = _Repository();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           accountSecurityRepositoryProvider.overrideWithValue(repository),
-          sessionControllerProvider.overrideWith(() => _Session(verified)),
+          sessionControllerProvider.overrideWith(
+            () => _Session(verified, phoneOnly: phoneOnly),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.dark,
@@ -119,6 +139,8 @@ void main() {
     tester,
   ) async {
     final repository = await pump(tester, verified: true);
+    await tester.ensureVisible(find.text('Change password'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Change password'));
     await tester.pumpAndSettle();
     const next = 'a-much-longer-new-passphrase-2026';
@@ -172,5 +194,45 @@ void main() {
     await tester.tap(find.text('Sign out others'));
     await tester.pumpAndSettle();
     expect(repository.calls, ['others']);
+  });
+
+  testWidgets(
+    'a phone-only account shows its phone and no password to change',
+    (tester) async {
+      await pump(tester, phoneOnly: true);
+      expect(find.text('+919876543210'), findsOneWidget);
+      expect(find.textContaining('No email on this account'), findsOneWidget);
+      expect(find.text('Change password'), findsNothing);
+    },
+  );
+
+  testWidgets('an email account adds a phone with an SMS code', (tester) async {
+    final repository = await pump(tester, verified: true);
+    await tester.tap(find.text('Add phone number'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('account-phone')),
+      '12345',
+    );
+    await tester.tap(find.text('Send code'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a 10-digit mobile number.'), findsOneWidget);
+    expect(repository.calls, isEmpty);
+    await tester.enterText(
+      find.byKey(const ValueKey('account-phone')),
+      '+91 98765 43210',
+    );
+    await tester.tap(find.text('Send code'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('account-phone-code')),
+      '246810',
+    );
+    await tester.tap(find.text('Verify number'));
+    await tester.pumpAndSettle();
+    expect(repository.calls, [
+      'phone:9876543210',
+      'confirm-phone:9876543210:246810',
+    ]);
   });
 }

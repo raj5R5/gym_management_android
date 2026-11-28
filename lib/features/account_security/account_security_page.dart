@@ -10,9 +10,11 @@ import '../../shared/widgets/page_section.dart';
 import '../auth/models/owner_registration.dart';
 import '../auth/models/session_state.dart';
 import '../auth/providers/session_controller.dart';
+import '../auth/data/phone_auth_repository.dart'
+    show indianMobileDigits, validateIndianMobile;
 import 'account_security.dart';
 
-/// Email verification, password and signed-in devices for the owner.
+/// Phone, email, password and signed-in devices for the account.
 class AccountSecurityPage extends ConsumerWidget {
   const AccountSecurityPage({super.key});
   @override
@@ -41,24 +43,38 @@ class AccountSecurityPage extends ConsumerWidget {
         ),
         if (user != null) ...[
           PageSection(
-            title: 'Email',
+            title: 'Phone number',
             top: AppSpacing.lg,
             children: [
-              Text(user.email, style: theme.textTheme.bodyLarge),
-              const SizedBox(height: AppSpacing.sm),
-              if (user.emailVerified)
-                const Row(
-                  children: [
-                    Icon(Icons.verified_outlined, size: 18),
-                    SizedBox(width: AppSpacing.sm),
-                    Text('Verified'),
-                  ],
-                )
-              else
-                const _VerifyEmail(),
+              _PhoneNumber(phone: user.phoneVerified ? user.phone : null),
             ],
           ),
-          const PageSection(title: 'Password', children: [_ChangePassword()]),
+          PageSection(
+            title: 'Email',
+            children: [
+              if (user.email == null)
+                Text(
+                  'No email on this account. You can add one in Owner profile.',
+                  style: theme.textTheme.bodyMedium,
+                )
+              else ...[
+                Text(user.email!, style: theme.textTheme.bodyLarge),
+                const SizedBox(height: AppSpacing.sm),
+                if (user.emailVerified)
+                  const Row(
+                    children: [
+                      Icon(Icons.verified_outlined, size: 18),
+                      SizedBox(width: AppSpacing.sm),
+                      Text('Verified'),
+                    ],
+                  )
+                else
+                  const _VerifyEmail(),
+              ],
+            ],
+          ),
+          if (user.hasPassword)
+            const PageSection(title: 'Password', children: [_ChangePassword()]),
           const PageSection(title: 'Signed-in devices', children: [_Devices()]),
         ],
       ],
@@ -422,6 +438,178 @@ class _Devices extends ConsumerWidget {
             style: theme.textTheme.bodySmall,
           ),
       ],
+    );
+  }
+}
+
+/// Shows the verified phone, and adds or changes it with an SMS code.
+class _PhoneNumber extends ConsumerStatefulWidget {
+  const _PhoneNumber({required this.phone});
+  final String? phone;
+  @override
+  ConsumerState<_PhoneNumber> createState() => _PhoneNumberState();
+}
+
+class _PhoneNumberState extends ConsumerState<_PhoneNumber> {
+  final _form = GlobalKey<FormState>();
+  final _number = TextEditingController();
+  final _code = TextEditingController();
+  bool _editing = false, _sent = false, _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _number.dispose();
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _run(
+    Future<void> Function(AccountSecurityRepository) action,
+  ) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await action(container.read(accountSecurityRepositoryProvider));
+    } on AccountSecurityFailure catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _send() async {
+    if (!_form.currentState!.validate()) return;
+    await _run((repository) async {
+      await repository.requestPhoneCode(indianMobileDigits(_number.text)!);
+      if (mounted) setState(() => _sent = true);
+    });
+  }
+
+  Future<void> _confirm() => _run((repository) async {
+    await repository.confirmPhone(
+      indianMobileDigits(_number.text)!,
+      _code.text.trim(),
+    );
+    if (!mounted) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Phone number verified. You can sign in with it.'),
+      ),
+    );
+    setState(() {
+      _editing = false;
+      _sent = false;
+      _code.clear();
+    });
+    await container.read(sessionControllerProvider.notifier).refreshSession();
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (!_editing) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.phone != null) ...[
+            Text(widget.phone!, style: theme.textTheme.bodyLarge),
+            const SizedBox(height: AppSpacing.sm),
+            const Row(
+              children: [
+                Icon(Icons.verified_outlined, size: 18),
+                SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text('Verified · sign in with a code sent to it'),
+                ),
+              ],
+            ),
+          ] else
+            Text(
+              'Add your mobile number to sign in with a code instead of a password.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppPalette.amber,
+              ),
+            ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() => _editing = true),
+              icon: const Icon(Icons.phone_outlined),
+              label: Text(
+                widget.phone == null ? 'Add phone number' : 'Change number',
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return Form(
+      key: _form,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            key: const ValueKey('account-phone'),
+            controller: _number,
+            enabled: !_busy && !_sent,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]')),
+              LengthLimitingTextInputFormatter(16),
+            ],
+            decoration: const InputDecoration(
+              labelText: 'Mobile number',
+              prefixText: '+91 ',
+            ),
+            validator: validateIndianMobile,
+          ),
+          if (_sent) ...[
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              key: const ValueKey('account-phone-code'),
+              controller: _code,
+              enabled: !_busy,
+              keyboardType: TextInputType.number,
+              autofillHints: const [AutofillHints.oneTimeCode],
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(8),
+              ],
+              decoration: const InputDecoration(labelText: 'Code from the SMS'),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _editing = false;
+                        _sent = false;
+                        _error = null;
+                      }),
+                child: const Text('Cancel'),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: _busy ? null : (_sent ? _confirm : _send),
+                child: Text(_sent ? 'Verify number' : 'Send code'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

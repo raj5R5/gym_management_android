@@ -139,7 +139,14 @@ class AuthRepository {
     _emit(SessionAuthenticated(identity));
   }
 
-  Future<void> login({required String email, required String password}) {
+  Future<void> login({required String email, required String password}) =>
+      _signIn(() => _api.login(email: email, password: password));
+
+  /// Signs in with credentials the server issued after checking a phone code.
+  /// The phone check happens outside the session; only its result is stored here.
+  Future<void> adopt(LoginResponse response) => _signIn(() async => response);
+
+  Future<void> _signIn(Future<LoginResponse> Function() obtain) {
     final revision = ++_revision;
     _blocked = true;
     return _ordered(() async {
@@ -148,7 +155,7 @@ class AuthRepository {
       try {
         await _clear();
         _checkRevision(revision);
-        final response = await _api.login(email: email, password: password);
+        final response = await obtain();
         await _stage(response.tokens, revision);
         _commit(response.tokens, response.identity, revision);
       } catch (error) {

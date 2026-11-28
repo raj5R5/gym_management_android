@@ -1,5 +1,7 @@
 abstract final class AppRoutes {
   static const startup = '/startup';
+  /// Phone sign-in: the first screen when signed out.
+  static const welcome = '/welcome';
   static const login = '/login';
   static const signup = '/sign-up';
   static const passwordRecovery = '/recover-access';

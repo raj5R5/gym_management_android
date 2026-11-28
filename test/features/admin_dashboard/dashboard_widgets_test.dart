@@ -35,7 +35,6 @@ import 'package:gym_management_app/features/admin_dashboard/providers/dashboard_
 import 'package:gym_management_app/features/admin_dashboard/presentation/circular_metric_card.dart';
 import 'package:gym_management_app/features/admin_dashboard/presentation/dashboard_date_range_dialog.dart';
 import 'package:gym_management_app/features/memberships/data/billing_failure.dart';
-import 'package:gym_management_app/features/memberships/models/billing_models.dart';
 import 'package:gym_management_app/app/theme/design_tokens.dart';
 import 'package:gym_management_app/features/memberships/providers/membership_providers.dart';
 import 'package:gym_management_app/features/auth/data/auth_failure.dart';
@@ -342,12 +341,8 @@ void main() {
         GymDashboard.fromJson(dashboardJson(empty: true)),
       );
       await tester.pumpAndSettle();
-      // A brand-new gym gets a setup checklist instead of a zero-state panel.
-      await reveal(tester, find.text('Finish setting up'));
-      expect(find.text('3 of 6 done'), findsOneWidget);
-      expect(find.text('Create a membership plan'), findsOneWidget);
-      expect(find.text('Add your first member'), findsOneWidget);
-      await scrollToTop(tester);
+      // The setup checklist was removed from the dashboard.
+      expect(find.text('Finish setting up'), findsNothing);
       await tester.scrollUntilVisible(find.text('Money collected'), 250);
       expect(
         find.descendant(
@@ -645,7 +640,7 @@ void main() {
     await tester.ensureVisible(find.text('Logout'));
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
   });
   testWidgets('trainer cannot navigate into admin shell or call dashboard', (
@@ -669,7 +664,7 @@ void main() {
     await tester.pumpAndSettle();
     scope.read(appRouterProvider).go(AppRoutes.members);
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
     expect(repository.requests, isEmpty);
   });
   testWidgets(
@@ -697,7 +692,7 @@ void main() {
       throwsA(isA<AuthFailure>()),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
     expect(await scope.read(dashboardProvider.future), isNull);
     expect(repository.requests.length, 1);
@@ -964,24 +959,19 @@ void main() {
     },
   );
 
-  testWidgets(
-    'setup checklist waits for the plan count, then lists missing steps',
-    (tester) async {
-      final plans = FakeMembershipRepository()
-        ..planGate = Completer<BillingPage<MembershipPlan>>();
-      await pumpAdmin(tester, FakeDashboardRepository(), plans: plans);
-      await tester.pumpAndSettle();
-      expect(find.text('Finish setting up'), findsNothing);
-      await reveal(tester, find.text('Pending dues'));
-      expect(find.text('₹500.00'), findsOneWidget);
-      plans.planGate!.complete(BillingPage([], pagination(1, 0)));
-      await tester.pumpAndSettle();
-      await scrollToTop(tester);
-      expect(find.text('Finish setting up'), findsOneWidget);
-      expect(find.text('Create a membership plan'), findsOneWidget);
-      expect(plans.operations, ['plans:$gymA:1']);
-    },
-  );
+  testWidgets('a gym with no plans still sees no setup checklist', (
+    tester,
+  ) async {
+    await pumpAdmin(
+      tester,
+      FakeDashboardRepository(),
+      plans: FakeMembershipRepository()..empty = true,
+    );
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('Pending dues'));
+    expect(find.text('Finish setting up'), findsNothing);
+    expect(find.text('Create a membership plan'), findsNothing);
+  });
   testWidgets(
     'narrow enlarged-text shell keeps all destinations accessible without broken labels',
     (tester) async {

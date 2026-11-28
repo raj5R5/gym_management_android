@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/auth_models.dart';
 import '../models/session_state.dart';
 import 'auth_providers.dart';
 
@@ -23,6 +24,10 @@ class SessionController extends Notifier<SessionState> {
       ref.read(authRepositoryProvider).restoreSession();
   Future<void> login({required String email, required String password}) =>
       ref.read(authRepositoryProvider).login(email: email, password: password);
+
+  /// A phone sign-in already checked by the server; stores its session.
+  Future<void> adoptSignIn(LoginResponse response) =>
+      ref.read(authRepositoryProvider).adopt(response);
   Future<void> logout() {
     final pending = _logoutFlight;
     if (pending != null) return pending;

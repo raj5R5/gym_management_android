@@ -53,6 +53,18 @@ class AccountSecurityRepository {
         'EMAIL_DELIVERY_UNAVAILABLE' =>
           'Email could not be sent right now. Try again later.',
         'RATE_LIMITED' => 'Too many tries. Wait a few minutes.',
+        'INVALID_OTP' => 'That code is not correct or has expired.',
+        'OTP_RESEND_TOO_SOON' =>
+          'Wait a minute before asking for another code.',
+        'OTP_LIMIT_REACHED' =>
+          'Too many codes for this number. Try again in an hour.',
+        'OTP_DELIVERY_UNAVAILABLE' =>
+          'The code could not be sent right now. Try again later.',
+        'PHONE_ALREADY_REGISTERED' =>
+          'This number is already used by another account.',
+        'PHONE_NOT_VERIFIED' => 'Add and verify a phone number first.',
+        'EMAIL_NOT_SET' => 'Add an email address first.',
+        'PASSWORD_NOT_SET' => 'This account signs in with a phone code.',
         _ => AuthFailure.fromDio(error).message,
       });
     } on TypeError {
@@ -85,6 +97,30 @@ class AccountSecurityRepository {
   Future<int> signOutOthers() => _call(
     () => _client.post<dynamic>('account/sessions/sign-out-others'),
     (data) => (data as Map)['otherSessionsEnded'] as int,
+  );
+
+  /// Sends a code to a new number for this account.
+  Future<void> requestPhoneCode(String digits) => _call(
+    () =>
+        _client.post<dynamic>('account/phone/request', data: {'phone': digits}),
+    (_) {},
+  );
+
+  /// Sets the account's phone once the code is right.
+  Future<void> confirmPhone(String digits, String code) => _call(
+    () => _client.post<dynamic>(
+      'account/phone/confirm',
+      data: {'phone': digits, 'code': code},
+    ),
+    (_) {},
+  );
+
+  /// Sends a code to the account's own phone, to confirm a sensitive change
+  /// when the account has no password.
+  Future<void> sendConfirmCode() => _call(
+    () =>
+        _client.post<dynamic>('account/confirm-code', data: <String, Object>{}),
+    (_) {},
   );
 
   Future<void> sendVerification() =>

@@ -117,9 +117,11 @@ class DioOwnerProfileRepository implements OwnerProfileRepository {
           : null;
       throw OwnerProfileFailure(switch (code) {
         'PROFILE_PASSWORD_REQUIRED' =>
-          'Enter your current password to change the sign-in email.',
+          'Confirm it is you to change the email: enter your password or the code sent to your phone.',
+        'ACCOUNT_NEEDS_SIGN_IN_METHOD' =>
+          'Keep an email, or add a phone number in Sign-in & security first.',
         'PROFILE_PASSWORD_INVALID' =>
-          'The current password is incorrect. Nothing was saved.',
+          'The password or code is not correct. Nothing was saved.',
         'DUPLICATE_EMAIL' =>
           'An account already uses that email. Choose another email.',
         'DUPLICATE_NAME' || 'DUPLICATE_GYM_NAME' =>

@@ -9,18 +9,14 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../shared/formatting/inr.dart';
-import '../../../shared/widgets/glass.dart';
 import '../../gym_settings/gym_settings.dart';
 import '../../members/models/member_overview.dart';
 import '../../members/presentation/member_overview_widgets.dart';
 import '../../members/providers/member_overview_providers.dart';
-import '../../memberships/providers/plan_providers.dart';
 import '../../owner_profile/owner_profile.dart';
 import '../models/dashboard_models.dart';
 import '../providers/dashboard_providers.dart';
 import '../../../shared/widgets/page_section.dart';
-import '../../auth/models/session_state.dart';
-import '../../auth/providers/session_controller.dart';
 
 const _weekdays = [
   'Monday',
@@ -162,106 +158,6 @@ List<SetupStep> setupSteps({
     () => context.push(AppRoutes.gymSettings),
   ),
 ];
-
-class SetupChecklist extends ConsumerWidget {
-  const SetupChecklist({super.key, required this.gym, required this.dashboard});
-  final AdminGymContext gym;
-  final GymDashboard? dashboard;
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(gymSettingsProvider).asData?.value;
-    final plans = ref.watch(activePlanCountProvider).asData?.value;
-    // Wait for real data: never show a half-known checklist.
-    if (settings == null || plans == null || dashboard == null) {
-      return const SizedBox.shrink();
-    }
-    final steps = setupSteps(
-      context: context,
-      gym: gym,
-      settings: settings,
-      planCount: plans,
-      dashboard: dashboard,
-      emailVerified: switch (ref.watch(sessionControllerProvider)) {
-        SessionAuthenticated(:final identity) => identity.user.emailVerified,
-        _ => true,
-      },
-    );
-    final done = steps.where((step) => step.done).length;
-    if (done == steps.length) return const SizedBox.shrink();
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: GlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Finish setting up',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ),
-                Text(
-                  '$done of ${steps.length} done',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: done / steps.length,
-                minHeight: 4,
-                backgroundColor: AppPalette.graphite,
-                semanticsLabel: 'Setup progress',
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            for (final step in steps)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    Icon(
-                      step.done
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
-                      size: 20,
-                      color: step.done
-                          ? theme.colorScheme.onSurfaceVariant
-                          : theme.colorScheme.onSurface,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        step.label,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: step.done
-                              ? theme.colorScheme.onSurfaceVariant
-                              : null,
-                          decoration: step.done
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                      ),
-                    ),
-                    if (!step.done)
-                      TextButton(
-                        onPressed: step.onTap,
-                        child: Text(step.actionLabel),
-                      ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Today's to-do: memberships ending soon, money to collect, and lapsed members.
 class DashboardTodo extends ConsumerWidget {

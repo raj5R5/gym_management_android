@@ -9,6 +9,7 @@ import '../../shared/widgets/field_icon.dart';
 import '../../shared/widgets/profile_section.dart';
 import '../auth/models/session_state.dart';
 import '../auth/providers/session_controller.dart';
+import '../account_security/account_security.dart';
 import 'account_deletion_repository.dart';
 import 'privacy_support_page.dart';
 
@@ -24,6 +25,24 @@ class _AccountDeletionPageState extends ConsumerState<AccountDeletionPage> {
   final _form = GlobalKey<FormState>();
   CancelToken? _cancel;
   bool _busy = false, _acknowledged = false, _hidden = true;
+  // Accounts without a password confirm with a code sent to their phone.
+  bool _codeSent = false, _sending = false;
+
+  Future<void> _sendCode() async {
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      await ref.read(accountSecurityRepositoryProvider).sendConfirmCode();
+      if (mounted) setState(() => _codeSent = true);
+    } on AccountSecurityFailure catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   String? _error;
   @override
   void dispose() {
@@ -52,7 +71,15 @@ class _AccountDeletionPageState extends ConsumerState<AccountDeletionPage> {
     }
 
     try {
-      await repository.request(userId, _password.text, cancel);
+      final session = ref.read(sessionControllerProvider);
+      final phoneCode =
+          session is SessionAuthenticated && !session.identity.user.hasPassword;
+      await repository.request(
+        userId,
+        phoneCode ? _password.text.trim() : _password.text,
+        cancel,
+        phoneCode: phoneCode,
+      );
     } on AccountDeletionFailure catch (failure) {
       if (current()) setState(() => _error = failure.message);
     } finally {
@@ -106,7 +133,7 @@ class _AccountDeletionPageState extends ConsumerState<AccountDeletionPage> {
                 icon: Icons.person_remove_outlined,
                 children: [
                   Text(
-                    user.email,
+                    user.contact,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -173,37 +200,66 @@ class _AccountDeletionPageState extends ConsumerState<AccountDeletionPage> {
                   title: 'Verify your request',
                   icon: Icons.lock_outline,
                   children: [
-                    Form(
-                      key: _form,
-                      child: TextFormField(
-                        controller: _password,
-                        enabled: !_busy,
-                        obscureText: _hidden,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        autofillHints: const [AutofillHints.password],
-                        decoration: InputDecoration(
-                          labelText: 'Current password',
-                          prefixIcon: const FieldIcon('currentPassword'),
-                          suffixIcon: IconButton(
-                            tooltip: _hidden
-                                ? 'Show password'
-                                : 'Hide password',
-                            onPressed: _busy
-                                ? null
-                                : () => setState(() => _hidden = !_hidden),
-                            icon: Icon(
-                              _hidden
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
+                    if (!session.identity.user.hasPassword && !_codeSent)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: _busy || _sending ? null : _sendCode,
+                          icon: const Icon(Icons.sms_outlined),
+                          label: const Text('Send code to my phone'),
+                        ),
+                      )
+                    else if (!session.identity.user.hasPassword)
+                      Form(
+                        key: _form,
+                        child: TextFormField(
+                          key: const ValueKey('deletion-code'),
+                          controller: _password,
+                          enabled: !_busy,
+                          keyboardType: TextInputType.number,
+                          autofillHints: const [AutofillHints.oneTimeCode],
+                          decoration: const InputDecoration(
+                            labelText: 'Code sent to your phone',
+                            prefixIcon: Icon(Icons.sms_outlined),
+                          ),
+                          validator: (value) =>
+                              RegExp(r'^\d{4,8}$').hasMatch(value?.trim() ?? '')
+                              ? null
+                              : 'Enter the code from the SMS.',
+                        ),
+                      )
+                    else
+                      Form(
+                        key: _form,
+                        child: TextFormField(
+                          controller: _password,
+                          enabled: !_busy,
+                          obscureText: _hidden,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          autofillHints: const [AutofillHints.password],
+                          decoration: InputDecoration(
+                            labelText: 'Current password',
+                            prefixIcon: const FieldIcon('currentPassword'),
+                            suffixIcon: IconButton(
+                              tooltip: _hidden
+                                  ? 'Show password'
+                                  : 'Hide password',
+                              onPressed: _busy
+                                  ? null
+                                  : () => setState(() => _hidden = !_hidden),
+                              icon: Icon(
+                                _hidden
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
                             ),
                           ),
+                          validator: (value) => value == null || value.isEmpty
+                              ? 'Enter your current password.'
+                              : null,
                         ),
-                        validator: (value) => value == null || value.isEmpty
-                            ? 'Enter your current password.'
-                            : null,
                       ),
-                    ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,

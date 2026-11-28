@@ -48,7 +48,10 @@ void main() {
       item('expiring', extra: {'planName': 'Monthly', 'daysLeft': 2}),
     );
     expect(expiring.message('Iron'), contains('Hi Ravi'));
-    expect(expiring.message('Iron'), contains('Monthly membership ends in 2 days'));
+    expect(
+      expiring.message('Iron'),
+      contains('Monthly membership ends in 2 days'),
+    );
     expect(expiring.message('Iron'), endsWith('– Iron'));
     final dues = GymNotification.fromJson(
       item('dues', extra: {'amountPaise': 50000}),

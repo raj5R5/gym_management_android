@@ -28,6 +28,7 @@ class FixedSession extends SessionController {
 class RequestsFake implements AccountDeletionRepository {
   DeletionRequest? receipt;
   int writes = 0;
+  final phoneCodes = <String>[];
   Completer<void>? gate;
   bool uncertain = false;
   @override
@@ -37,9 +38,11 @@ class RequestsFake implements AccountDeletionRepository {
   Future<DeletionRequest> request(
     String userId,
     String password,
-    CancelToken cancel,
-  ) async {
+    CancelToken cancel, {
+    bool phoneCode = false,
+  }) async {
     writes++;
+    if (phoneCode) phoneCodes.add(password);
     if (gate != null) await gate!.future;
     receipt = DeletionRequest(
       id: 'a' * 24,
@@ -377,7 +380,7 @@ void main() {
       container.read(appRouterProvider).go(AppRoutes.accountDeletion);
       await tester.pumpAndSettle();
       expect(find.byType(AccountDeletionPage), findsNothing);
-      expect(find.text('Sign in to your account'), findsOneWidget);
+      expect(find.text('Who is signing in?'), findsOneWidget);
     },
   );
   testWidgets('privacy remains public during a recoverable restoration error', (

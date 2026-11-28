@@ -111,7 +111,7 @@ class AuthenticatedHomeScreen extends ConsumerWidget {
             title: 'Your account',
             icon: Icons.person_outline,
             children: [
-              Text(user.email, style: Theme.of(context).textTheme.bodyLarge),
+              Text(user.contact, style: Theme.of(context).textTheme.bodyLarge),
               if (ref.watch(adminGymProvider) != null) ...[
                 const SizedBox(height: 8),
                 const Text('Manage your gym from one workspace.'),

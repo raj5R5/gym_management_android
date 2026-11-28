@@ -166,6 +166,10 @@ void main() {
     tester,
   ) async {
     final container = await pump(tester, FakeRegistration(), signup: false);
+    // Signed out, the app opens on phone sign-in; email sign-up is behind it.
+    await tester.ensureVisible(find.text('Sign in with email and password'));
+    await tester.tap(find.text('Sign in with email and password'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Sign Up'));
     await tester.tap(find.text('Sign Up'));
     await tester.pumpAndSettle();

@@ -444,13 +444,13 @@ void main() {
       throwsA(isA<AuthFailure>()),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
     expect(find.text('Trainer details'), findsNothing);
     container
         .read(appRouterProvider)
         .go('${AppRoutes.trainers}/$trainerId?gymId=$gymA');
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
   });
   testWidgets(
     'logout from trainer details returns to login and clears protected data',
@@ -476,7 +476,7 @@ void main() {
       await tester.ensureVisible(find.text('Logout'));
       await tester.tap(find.text('Logout'));
       await tester.pumpAndSettle();
-      expect(find.text('Sign in to your account'), findsOneWidget);
+      expect(find.text('Who is signing in?'), findsOneWidget);
       expect(await container.read(trainersProvider.future), isNull);
       expect(find.byType(NavigationBar), findsNothing);
     },
@@ -494,7 +494,7 @@ void main() {
           .read(appRouterProvider)
           .go('${AppRoutes.trainers}/$trainerId?gymId=$gymA');
       await tester.pumpAndSettle();
-      expect(find.text('Sign in to your account'), findsOneWidget);
+      expect(find.text('Who is signing in?'), findsOneWidget);
       expect(repository.listCalls, isEmpty);
       expect(repository.operations, isEmpty);
     },

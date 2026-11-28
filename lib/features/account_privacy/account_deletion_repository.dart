@@ -41,11 +41,15 @@ class AccountDeletionFailure implements Exception {
 
 abstract interface class AccountDeletionRepository {
   Future<DeletionRequest?> status(String userId, CancelToken cancel);
+
+  /// [secret] is the current password, or with [phoneCode] the SMS code sent
+  /// to the account's phone (accounts that have no password).
   Future<DeletionRequest> request(
     String userId,
-    String password,
-    CancelToken cancel,
-  );
+    String secret,
+    CancelToken cancel, {
+    bool phoneCode = false,
+  });
 }
 
 class DioAccountDeletionRepository implements AccountDeletionRepository {
@@ -74,7 +78,7 @@ class DioAccountDeletionRepository implements AccountDeletionRepository {
           : null;
       throw AccountDeletionFailure(switch (code) {
         'ACCOUNT_DELETION_PASSWORD_INVALID' =>
-          'Your current password is incorrect. No new request was saved.',
+          'Your password or code is not correct. No new request was saved.',
         'INVALID_AUTHENTICATION' =>
           'Sign in again to manage your account-deletion request.',
         'RATE_LIMITED' => 'Too many attempts. Please wait before trying again.',
@@ -102,15 +106,16 @@ class DioAccountDeletionRepository implements AccountDeletionRepository {
   @override
   Future<DeletionRequest> request(
     String userId,
-    String password,
-    CancelToken cancel,
-  ) async {
+    String secret,
+    CancelToken cancel, {
+    bool phoneCode = false,
+  }) async {
     final receipt = await _read(
       userId,
       () => client.post<dynamic>(
         'auth/account-deletion-request',
         data: {
-          'currentPassword': password,
+          phoneCode ? 'otpCode' : 'currentPassword': secret,
           'acknowledgement': 'REQUEST_ACCOUNT_DELETION',
         },
         cancelToken: cancel,

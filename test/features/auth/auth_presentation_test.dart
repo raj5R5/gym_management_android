@@ -91,6 +91,7 @@ void main() {
   ) async {
     await pumpGym(tester);
     await tester.pumpAndSettle();
+    await openEmailLogin(tester);
     expect(find.text('MuscleDesk'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
@@ -118,6 +119,7 @@ void main() {
       final api = FakeAuthApi();
       await pumpGym(tester, api: api);
       await tester.pumpAndSettle();
+      await openEmailLogin(tester);
       await enterLogin(
         tester,
         email: scenario.email,
@@ -135,6 +137,7 @@ void main() {
     (tester) async {
       await pumpGym(tester);
       await tester.pumpAndSettle();
+      await openEmailLogin(tester);
       final password = syntheticCredential();
       await enterLogin(tester, password: password);
       await tester.tap(find.byTooltip('Show password'));
@@ -166,6 +169,7 @@ void main() {
       final api = FakeAuthApi();
       final container = await pumpGym(tester, api: api);
       await tester.pumpAndSettle();
+      await openEmailLogin(tester);
       final router = container.read(appRouterProvider);
       final password = ' ${syntheticCredential()} ';
       await enterLogin(
@@ -191,6 +195,7 @@ void main() {
       final api = FakeAuthApi()..loginGate = Completer<void>();
       await pumpGym(tester, api: api);
       await tester.pumpAndSettle();
+      await openEmailLogin(tester);
       await enterLogin(tester);
       await tester.tap(find.text('Login'));
       await tester.pump();
@@ -221,6 +226,7 @@ void main() {
         final api = FakeAuthApi()..loginFailure = AuthFailure(kind);
         await pumpGym(tester, api: api);
         await tester.pumpAndSettle();
+        await openEmailLogin(tester);
         await enterLogin(tester);
         await tester.tap(find.text('Login'));
         await tester.pumpAndSettle();
@@ -266,7 +272,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(api.refreshCalls, 1);
         expect(
-          find.text(fails ? 'Sign in to your account' : 'You are signed in.'),
+          find.text(fails ? 'Who is signing in?' : 'You are signed in.'),
           findsOneWidget,
         );
         expect(
@@ -384,8 +390,11 @@ void main() {
         await duplicateResult;
         await tester.pumpAndSettle();
         expect(storage.value, isNull);
-        expect(router.routeInformationProvider.value.uri.path, AppRoutes.login);
-        expect(find.text('Sign in to your account'), findsOneWidget);
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          AppRoutes.welcome,
+        );
+        expect(find.text('Who is signing in?'), findsOneWidget);
         expect(identical(router, container.read(appRouterProvider)), isTrue);
         expect(
           container.read(sessionControllerProvider),
@@ -406,6 +415,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await pumpGym(tester);
     await tester.pumpAndSettle();
+    await openEmailLogin(tester);
     await enterLogin(tester);
     await tester.ensureVisible(find.text('Login'));
     expect(tester.takeException(), isNull);
@@ -413,4 +423,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('You are signed in.'), findsOneWidget);
   });
+}
+
+/// Signed out, the app opens on phone sign-in; these tests use the email form.
+Future<void> openEmailLogin(WidgetTester tester) async {
+  final link = find.text('Sign in with email and password');
+  await tester.ensureVisible(link);
+  await tester.tap(link);
+  await tester.pumpAndSettle();
 }

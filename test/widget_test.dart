@@ -18,14 +18,14 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     expect(find.byType(ProviderScope), findsOneWidget);
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('startup without credentials reaches login', (tester) async {
     await pumpGym(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
     expect(find.text('Restoring your session…'), findsNothing);
   });
 
@@ -37,7 +37,7 @@ void main() {
     container.read(appRouterProvider).go(AppRoutes.home);
     await tester.pumpAndSettle();
     expect(find.text('You are signed in.'), findsNothing);
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
   });
 
   for (final scenario in [
@@ -62,7 +62,7 @@ void main() {
         container.read(appRouterProvider).go(AppRoutes.home);
         await tester.pumpAndSettle();
         expect(find.text('You are signed in.'), findsNothing);
-        expect(find.text('Sign in to your account'), findsOneWidget);
+        expect(find.text('Who is signing in?'), findsOneWidget);
       },
     );
   }
@@ -75,7 +75,7 @@ void main() {
     expect(find.text('Page not found'), findsOneWidget);
     await tester.tap(find.text('Return to start'));
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
   });
 
   testWidgets('root route resolves according to session state', (tester) async {
@@ -83,6 +83,6 @@ void main() {
     await tester.pumpAndSettle();
     container.read(appRouterProvider).go('/');
     await tester.pumpAndSettle();
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
   });
 }

@@ -349,10 +349,7 @@ void main() {
     (tester) async {
       await pump(tester);
       await detail(tester);
-      await tap(
-        tester,
-        find.widgetWithText(TextButton, 'Cancel membership'),
-      );
+      await tap(tester, find.widgetWithText(TextButton, 'Cancel membership'));
       expect(billing.operations.where((e) => e.startsWith('cancel')), isEmpty);
       expect(find.textContaining('No refund is created'), findsOneWidget);
       await reveal(tester, find.byKey(const ValueKey('cancellationReason')));
@@ -505,10 +502,10 @@ void main() {
             .value
             .uri
             .path,
-        AppRoutes.login,
+        AppRoutes.welcome,
       );
       expect(find.text('Select an active plan'), findsNothing);
-      expect(find.text('Sign in to your account'), findsOneWidget);
+      expect(find.text('Who is signing in?'), findsOneWidget);
     },
   );
   testWidgets(
@@ -522,7 +519,7 @@ void main() {
             .value
             .uri
             .path,
-        AppRoutes.login,
+        AppRoutes.welcome,
       );
       expect(billing.operations, isEmpty);
       await container
@@ -846,7 +843,7 @@ void main() {
       );
       await container.read(sessionControllerProvider.notifier).logout();
       await tester.pumpAndSettle();
-      expect(find.text('Sign in to your account'), findsOneWidget);
+      expect(find.text('Who is signing in?'), findsOneWidget);
     },
   );
   testWidgets('four tabs select correctly and drawer retains the fifth route', (
@@ -898,7 +895,7 @@ void main() {
     expect(find.text('Owner profile'), findsOneWidget);
     expect(find.text('Membership Plans'), findsOneWidget);
     await tap(tester, find.widgetWithText(FilledButton, 'Logout'));
-    expect(find.text('Sign in to your account'), findsOneWidget);
+    expect(find.text('Who is signing in?'), findsOneWidget);
   });
   testWidgets('Plans create and edit back navigation return to plan list', (
     tester,
@@ -974,7 +971,7 @@ void main() {
     await pump(tester, authenticated: false, path: AppRoutes.plans);
     expect(
       container.read(appRouterProvider).routeInformationProvider.value.uri.path,
-      AppRoutes.login,
+      AppRoutes.welcome,
     );
     expect(billing.operations, isEmpty);
     api.identity = adminIdentity(gyms: [gymA], role: AuthRole.trainer);
@@ -1323,9 +1320,7 @@ void main() {
         tester,
         find.widgetWithText(TextButton, 'Cancel membership'),
       );
-      await tester.tap(
-        find.widgetWithText(TextButton, 'Cancel membership'),
-      );
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel membership'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(

@@ -12,6 +12,9 @@ import '../auth/models/owner_registration.dart';
 import '../members/photos/member_photo_models.dart';
 import '../members/photos/member_photo_providers.dart';
 import '../members/photos/member_photo_widgets.dart';
+import '../account_security/account_security.dart';
+import '../auth/models/session_state.dart';
+import '../auth/providers/session_controller.dart';
 import 'owner_profile.dart';
 import 'owner_profile_widgets.dart';
 import 'owner_signup_photo.dart';
@@ -67,6 +70,9 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
   final _form = GlobalKey<FormState>();
   late final Map<String, TextEditingController> _fields;
   final _password = TextEditingController();
+  // Accounts without a password confirm an email change with an SMS code.
+  final _otp = TextEditingController();
+  bool _otpSent = false;
   late Map<String, String> _saved;
   final _cancel = CancelToken();
   bool _busy = false, _handoff = true;
@@ -125,6 +131,7 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
       field.dispose();
     }
     _password.dispose();
+    _otp.dispose();
     super.dispose();
   }
 
@@ -147,10 +154,15 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
       final saved = await repository.save(scope, {
         ...input,
         if (_password.text.isNotEmpty) 'currentPassword': _password.text,
+        if (_otp.text.trim().isNotEmpty) 'otpCode': _otp.text.trim(),
       }, _cancel);
       if (!mounted || ref.read(adminGymProvider) != scope) return;
       _saved = input;
       _password.clear();
+      _otp.clear();
+      _otpSent = false;
+      // The account's email may have changed: reload who is signed in.
+      ref.read(sessionControllerProvider.notifier).refreshSession().ignore();
       // Update public profile only; never rotate or replace credentials here.
       ref.invalidate(ownerProfileProvider);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -193,6 +205,15 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
   );
   @override
   Widget build(BuildContext context) {
+    final account = switch (ref.watch(sessionControllerProvider)) {
+      SessionAuthenticated(:final identity) => identity.user,
+      _ => null,
+    };
+    final hasPassword = account?.hasPassword ?? true;
+    final phoneSignIn = account?.phoneVerified ?? false;
+    final emailChanged =
+        _fields['email']!.text.trim().toLowerCase() !=
+        _saved['email']!.toLowerCase();
     final photo = ref.watch(memberPhotoControllerProvider(widget.target)).value;
     final photoBusy = photo?.busy == true || _handoff;
     return FormNavigationGuard(
@@ -261,8 +282,12 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
                       _field('displayName', 'Full name', ownerFullNameError),
                       _field(
                         'email',
-                        'Sign-in email',
-                        ownerEmailError,
+                        phoneSignIn ? 'Email (optional)' : 'Sign-in email',
+                        phoneSignIn
+                            ? (value) => (value ?? '').trim().isEmpty
+                                  ? null
+                                  : ownerEmailError(value)
+                            : ownerEmailError,
                         keyboard: TextInputType.emailAddress,
                       ),
                       _field(
@@ -271,8 +296,14 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
                         ownerGymPhoneError,
                         keyboard: TextInputType.phone,
                       ),
-                      if (_fields['email']!.text.trim().toLowerCase() !=
-                          _saved['email']!.toLowerCase())
+                      if (emailChanged && !hasPassword)
+                        _EmailChangeCode(
+                          controller: _otp,
+                          enabled: !_busy,
+                          sent: _otpSent,
+                          onSent: () => setState(() => _otpSent = true),
+                        ),
+                      if (emailChanged && hasPassword)
                         TextFormField(
                           controller: _password,
                           enabled: !_busy,
@@ -344,4 +375,80 @@ class _ProfileFormState extends ConsumerState<_ProfileForm> {
       ),
     );
   }
+}
+
+/// Sends a code to the account's phone and takes it, to confirm an email change.
+class _EmailChangeCode extends ConsumerStatefulWidget {
+  const _EmailChangeCode({
+    required this.controller,
+    required this.enabled,
+    required this.sent,
+    required this.onSent,
+  });
+  final TextEditingController controller;
+  final bool enabled, sent;
+  final VoidCallback onSent;
+  @override
+  ConsumerState<_EmailChangeCode> createState() => _EmailChangeCodeState();
+}
+
+class _EmailChangeCodeState extends ConsumerState<_EmailChangeCode> {
+  bool _sending = false;
+  String? _error;
+
+  Future<void> _send() async {
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+    try {
+      await ref.read(accountSecurityRepositoryProvider).sendConfirmCode();
+      widget.onSent();
+    } on AccountSecurityFailure catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (widget.sent)
+        TextFormField(
+          key: const ValueKey('email-change-code'),
+          controller: widget.controller,
+          enabled: widget.enabled,
+          keyboardType: TextInputType.number,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          validator: (value) =>
+              RegExp(r'^\d{4,8}$').hasMatch(value?.trim() ?? '')
+              ? null
+              : 'Enter the code from the SMS.',
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.sms_outlined),
+            labelText: 'Code sent to your phone',
+            helperText: 'Confirms it is you changing the email.',
+          ),
+        )
+      else
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: widget.enabled && !_sending ? _send : null,
+            icon: const Icon(Icons.sms_outlined),
+            label: const Text('Send code to my phone'),
+          ),
+        ),
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _error!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+    ],
+  );
 }

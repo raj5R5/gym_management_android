@@ -20,10 +20,13 @@ Map<String, dynamic> _object(Object? value) {
 class AuthUser {
   const AuthUser({
     required this.id,
-    required this.email,
     required this.status,
+    this.email,
     this.displayName,
     this.emailVerified = false,
+    this.phone,
+    this.phoneVerified = false,
+    this.hasPassword = true,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -31,19 +34,41 @@ class AuthUser {
     if (displayName != null && displayName is! String) {
       throw const FormatException('Invalid account display name.');
     }
+    for (final key in ['email', 'phone']) {
+      final value = json[key];
+      if (value != null && (value is! String || value.trim().isEmpty)) {
+        throw FormatException('Invalid account $key.');
+      }
+    }
     return AuthUser(
       id: _string(json, 'id'),
-      email: _string(json, 'email'),
+      email: json['email'] as String?,
       displayName: displayName as String?,
       status: AccountStatus.values.byName(_string(json, 'status')),
       emailVerified: json['emailVerified'] == true,
+      phone: json['phone'] as String?,
+      phoneVerified: json['phoneVerified'] == true,
+      // Older servers did not say; every account then had a password.
+      hasPassword: json['hasPassword'] != false,
     );
   }
 
   final String id;
-  final String email;
+
+  /// Optional: accounts made with a phone number may have no email.
+  final String? email;
+
+  /// The verified mobile, as +91 and 10 digits.
+  final String? phone;
+  final bool phoneVerified;
+
+  /// False for accounts that sign in only with a phone code.
+  final bool hasPassword;
   final String? displayName;
   final AccountStatus status;
+
+  /// How to show who is signed in: email, else phone.
+  String get contact => email ?? phone ?? '';
 
   /// The owner entered the code emailed to this address.
   final bool emailVerified;

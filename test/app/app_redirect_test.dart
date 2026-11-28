@@ -27,21 +27,36 @@ void main() {
     expect(appRedirect(refreshing, AppRoutes.login), AppRoutes.startup);
   });
 
-  test('activation stays public; signed-out shell pages go to login', () {
-    expect(
-      appRedirect(const SessionUnauthenticated(), AppRoutes.activate),
-      isNull,
-    );
-    expect(
-      appRedirect(const SessionUnauthenticated(), AppRoutes.paymentClaims),
-      AppRoutes.login,
-    );
-    expect(
-      appRedirect(
-        SessionAuthenticated(syntheticIdentity()),
-        AppRoutes.activate,
-      ),
-      isNull,
-    );
-  });
+  test(
+    'activation stays public; signed-out shell pages go to the welcome screen',
+    () {
+      expect(
+        appRedirect(const SessionUnauthenticated(), AppRoutes.activate),
+        isNull,
+      );
+      expect(
+        appRedirect(const SessionUnauthenticated(), AppRoutes.paymentClaims),
+        AppRoutes.welcome,
+      );
+      // Email sign-in and phone sign-in both stay reachable when signed out.
+      for (final path in [AppRoutes.welcome, AppRoutes.login]) {
+        expect(appRedirect(const SessionUnauthenticated(), path), isNull);
+      }
+      // A signed-in user never stays on a sign-in screen.
+      expect(
+        appRedirect(
+          SessionAuthenticated(syntheticIdentity()),
+          AppRoutes.welcome,
+        ),
+        isNot(AppRoutes.welcome),
+      );
+      expect(
+        appRedirect(
+          SessionAuthenticated(syntheticIdentity()),
+          AppRoutes.activate,
+        ),
+        isNull,
+      );
+    },
+  );
 }
