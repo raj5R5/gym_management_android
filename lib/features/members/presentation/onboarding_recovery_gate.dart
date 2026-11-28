@@ -605,9 +605,7 @@ class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
                         ] else
                           const Text('No initial payment was recorded.'),
                         const SizedBox(height: AppSpacing.lg),
-                        const Text(
-                          'Saved. Tap Done to add the next member.',
-                        ),
+                        const Text('Saved. Tap Done to add the next member.'),
                         TextButton(
                           onPressed: () async {
                             if (!_current || _busy) return;

@@ -371,33 +371,31 @@ class BillRow extends StatelessWidget {
     );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Text(
-              label,
-              style: total
-                  ? theme.textTheme.titleMedium
-                  : theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: total
+                    ? theme.textTheme.titleMedium
+                    : theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+              ),
             ),
-          ),
-          if (trailing != null) ...[
-            Flexible(child: trailing!),
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          // Right-aligned; on a narrow phone with large text the amount
-          // shrinks rather than clipping.
-          Expanded(
-            flex: 2,
-            child: Align(
-              alignment: AlignmentDirectional.centerEnd,
+            if (trailing != null) ...[
+              trailing!,
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            // Flush right; on a narrow phone with large text the amount
+            // shrinks rather than clipping.
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth * .45),
               child: FittedBox(fit: BoxFit.scaleDown, child: amount),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

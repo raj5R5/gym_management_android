@@ -15,6 +15,7 @@ import '../../features/owner_profile/owner_signup_photo.dart';
 import '../../shared/widgets/glass_tab_bar.dart';
 import '../../shared/widgets/titanium_surface.dart';
 import 'form_navigation_guard.dart';
+import '../../features/notifications/notifications_page.dart';
 
 class AdminShell extends ConsumerWidget {
   const AdminShell({super.key, required this.location, required this.child});
@@ -59,6 +60,7 @@ class AdminShell extends ConsumerWidget {
         location.startsWith(AppRoutes.pt) ||
         location == AppRoutes.paymentClaims ||
         location.startsWith(AppRoutes.reports) ||
+        location == AppRoutes.notifications ||
         location == AppRoutes.branches ||
         memberDetail ||
         trainerDetail ||
@@ -107,6 +109,7 @@ class AdminShell extends ConsumerWidget {
             child: const SizedBox.expand(),
           ),
           automaticallyImplyLeading: false,
+          actions: const [NotificationBell()],
           leading: Builder(
             builder: (context) => IconButton(
               tooltip: 'Admin navigation',

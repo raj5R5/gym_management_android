@@ -24,6 +24,7 @@ abstract final class AppRoutes {
   static const pt = '/home/pt';
   static const paymentClaims = '/home/payment-claims';
   static const reports = '/home/reports';
+  static const notifications = '/home/notifications';
   static const checkInScan = '/home/check-in/scan';
   static const todayVisits = '/home/check-in/today';
 }

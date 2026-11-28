@@ -108,7 +108,7 @@ void main() {
   });
 
   for (final field in [
-    'startDate',
+    'futureStartDate',
     'branchId',
     'address',
     'emergencyContact',
@@ -116,8 +116,8 @@ void main() {
     test('uneditable $field is preserved and not offered correction', () {
       final body = paymentRequest().toJson();
       switch (field) {
-        case 'startDate':
-          (body['membership'] as Map)['startDate'] = '2026-01-01';
+        case 'futureStartDate':
+          (body['membership'] as Map)['startDate'] = '2999-01-01';
         case 'branchId':
           (body['member'] as Map)['branchId'] = onboardingPlanId;
         case 'address':
@@ -220,4 +220,18 @@ void main() {
       expect(draft.paymentReference, '');
     },
   );
+
+  test('an existing member with a past start date can be corrected', () {
+    final body = paymentRequest().toJson();
+    (body['membership'] as Map)['startDate'] = '2026-01-10';
+    final operation = rejected(
+      OnboardingBackendCode.validationError,
+      request: OnboardingRequest.fromFrozenJson(jsonEncode(body)),
+    );
+    final correction = OnboardingCorrection.supported(operation);
+    expect(correction, isNotNull);
+    final draft = correction!.draft(null);
+    expect(draft.existingMember, isTrue);
+    expect(draft.joinedOn, '2026-01-10');
+  });
 }

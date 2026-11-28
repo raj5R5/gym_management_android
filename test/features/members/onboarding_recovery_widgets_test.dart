@@ -1261,11 +1261,13 @@ void main() {
   testWidgets('legacy and unsupported fields remain locked without correction', (
     tester,
   ) async {
+    final body = onboardingRequest(membership: true).toJson();
+    (body['membership'] as Map)['startDate'] = '2999-01-01';
     final original = rejectedForCorrection(
-      request: onboardingRequest(membership: true),
+      request: OnboardingRequest.fromFrozenJson(jsonEncode(body)),
     );
-    // An explicit start date cannot be edited by this wizard. Preserve it rather
-    // than silently replacing it with the server default.
+    // A future start date cannot be edited by this wizard (only an existing
+    // member's past start can). Preserve it rather than replacing it.
     save(original);
     await mount(tester);
     expect(find.text('Correct details and retry'), findsNothing);

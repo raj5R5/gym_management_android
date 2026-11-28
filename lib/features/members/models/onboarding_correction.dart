@@ -45,10 +45,22 @@ class OnboardingCorrection {
             'gender',
           }.contains(key),
         ) ||
-        membership?.containsKey('startDate') == true) {
+        !_editableStart(membership?['startDate'])) {
       return null;
     }
     return OnboardingCorrection._(operation);
+  }
+
+  /// An existing member's start date (today or earlier) can be corrected in
+  /// the wizard; any other saved start date is kept locked.
+  static bool _editableStart(Object? startDate) {
+    if (startDate == null) return true;
+    if (startDate is! String) return false;
+    return OnboardingWizardState(
+          existingMember: true,
+          joinedOn: startDate,
+        ).joinedOnDate !=
+        null;
   }
 
   OnboardingBackendCode get code => operation.attempts.last.rejection!.code;
@@ -102,6 +114,8 @@ class OnboardingCorrection {
             )
           : null,
       paymentReference: paid ? (payment?['reference'] as String? ?? '') : '',
+      existingMember: membership?['startDate'] != null,
+      joinedOn: membership?['startDate'] as String? ?? '',
     );
   }
 

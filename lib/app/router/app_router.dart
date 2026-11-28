@@ -47,6 +47,7 @@ import '../navigation/form_navigation_guard.dart';
 import '../navigation/foundation_screens.dart';
 import 'app_routes.dart';
 import '../../features/members/import/member_import_page.dart';
+import '../../features/notifications/notifications_page.dart';
 
 /// Where [path] should go for [current]; null keeps it. Pure, for testing.
 String? appRedirect(SessionState current, String path) {
@@ -307,6 +308,10 @@ GoRouter createAppRouter({
                     LeadDetailPage(leadId: state.pathParameters['leadId']!),
               ),
             ],
+          ),
+          GoRoute(
+            path: AppRoutes.notifications,
+            builder: (_, _) => const NotificationsPage(),
           ),
           GoRoute(
             path: AppRoutes.reports,
