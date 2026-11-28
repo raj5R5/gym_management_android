@@ -1,5 +1,6 @@
 import '../../memberships/models/billing_models.dart';
 import '../data/onboarding_failure.dart';
+import 'member_draft.dart' show memberPhoneKey;
 import 'onboarding_wizard_state.dart';
 import 'pending_onboarding.dart';
 
@@ -24,6 +25,7 @@ class OnboardingCorrection {
     final code = operation.attempts.last.rejection!.code;
     if (!{
       OnboardingBackendCode.duplicateMemberCode,
+      OnboardingBackendCode.duplicateMemberPhone,
       OnboardingBackendCode.duplicatePaymentReference,
       OnboardingBackendCode.validationError,
       OnboardingBackendCode.planNotFound,
@@ -68,6 +70,8 @@ class OnboardingCorrection {
   String get explanation => switch (code) {
     OnboardingBackendCode.duplicateMemberCode =>
       'This member code is already used in this gym. Enter a different member code.',
+    OnboardingBackendCode.duplicateMemberPhone =>
+      'This phone number already belongs to a member of this gym. Check the number, or find that member in Members instead of adding them again.',
     OnboardingBackendCode.duplicatePaymentReference =>
       'This payment reference is already recorded. Check the payment and enter its correct, unused reference, or skip the initial payment.',
     OnboardingBackendCode.planNotFound =>
@@ -96,7 +100,11 @@ class OnboardingCorrection {
                 OnboardingWizardStep.payment,
               _ => OnboardingWizardStep.memberDetails,
             },
-      memberCode: member['memberCode'] as String,
+      // The wizard no longer asks for a code: a rejected code is dropped so
+      // the server numbers the member instead.
+      memberCode: code == OnboardingBackendCode.duplicateMemberCode
+          ? ''
+          : member['memberCode'] as String? ?? '',
       firstName: member['firstName'] as String,
       lastName: member['lastName'] as String,
       phone: member['phone'] as String,
@@ -120,13 +128,26 @@ class OnboardingCorrection {
   }
 
   OnboardingReviewIssue? issue(OnboardingWizardState draft) {
+    final savedPhone = operation.request.toJson()['member']['phone'] as String;
+    if (operation.attempts.any(
+          (attempt) =>
+              attempt.rejection?.code ==
+              OnboardingBackendCode.duplicateMemberPhone,
+        ) &&
+        memberPhoneKey(draft.phone) == memberPhoneKey(savedPhone)) {
+      return const OnboardingReviewIssue(
+        OnboardingWizardStep.memberDetails,
+        'Enter a different phone number before retrying this registration.',
+      );
+    }
     if (operation.attempts.any(
           (attempt) =>
               attempt.rejection?.code ==
               OnboardingBackendCode.duplicateMemberCode,
         ) &&
         draft.memberCode.trim().toUpperCase() ==
-            (operation.request.toJson()['member']['memberCode'] as String)
+            ((operation.request.toJson()['member']['memberCode'] as String?) ??
+                    '')
                 .trim()
                 .toUpperCase()) {
       return const OnboardingReviewIssue(

@@ -184,7 +184,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder getForm() => find.byKey(const ValueKey('memberCode'));
+  Finder getForm() => find.byKey(const ValueKey('phone'));
 
   testWidgets(
     'confirmed onboarding refreshes current gym revenue and outstanding dues',
@@ -1029,7 +1029,7 @@ void main() {
   }
 
   PendingOnboardingOperation rejectedForCorrection({
-    OnboardingBackendCode code = OnboardingBackendCode.duplicateMemberCode,
+    OnboardingBackendCode code = OnboardingBackendCode.duplicateMemberPhone,
     OnboardingRequest? request,
     bool earlierUncertainty = false,
   }) {
@@ -1061,14 +1061,17 @@ void main() {
   Future<void> prepareCorrectionReview(WidgetTester tester) async {
     await tap(tester, 'Correct details and retry');
     expect(repository.calls, isEmpty);
-    expect((tester.widget<TextFormField>(getForm())).initialValue, 'ME01');
+    expect(
+      (tester.widget<TextFormField>(getForm())).initialValue,
+      '9876543210',
+    );
     expect(
       tester
           .widget<TextFormField>(find.byKey(const ValueKey('firstName')))
           .initialValue,
       'Alex',
     );
-    await tester.enterText(getForm(), 'ME02');
+    await tester.enterText(getForm(), '9876500002');
     await tap(tester, 'Continue');
     // Restored member-only choice is preserved; payment remains omitted.
     await tap(tester, 'Continue');
@@ -1086,7 +1089,7 @@ void main() {
       await mount(tester);
       expect(find.text('Correct details and retry'), findsOneWidget);
       expect(
-        find.textContaining('member code is already used'),
+        find.textContaining('phone number already belongs'),
         findsOneWidget,
       );
       await tap(tester, 'Correct details and retry');
@@ -1100,7 +1103,7 @@ void main() {
       );
       expect(repository.calls, isEmpty);
       expect(storage.values[original.scope.storageKey], original.encode());
-      await tester.enterText(getForm(), 'ME02');
+      await tester.enterText(getForm(), '9876500002');
       await tap(tester, 'Continue');
       await tap(tester, 'Continue');
       await container.read(membersProvider.future);
@@ -1109,7 +1112,7 @@ void main() {
       await tap(tester, 'Confirm registration');
       expect(repository.calls, hasLength(1));
       final request = jsonDecode(repository.calls.single.body) as Map;
-      expect(request['member']['memberCode'], 'ME02');
+      expect(request['member']['phone'], '9876500002');
       expect(request['member']['firstName'], 'Alex');
       expect(request.containsKey('membership'), isFalse);
       expect(repository.calls.single.key, isNot(original.idempotencyKey));
@@ -1131,7 +1134,7 @@ void main() {
       final confirmed = PendingOnboardingOperation.decode(
         storage.values[original.scope.storageKey]!,
       );
-      expect(confirmed.result!.member.memberCode, 'ME02');
+      expect(confirmed.result!.member.memberCode, 'ME01');
       await container.read(membersProvider.future);
       expect(membersRepository.listCalls.length, greaterThan(memberReads));
       await container.read(dashboardProvider.future);
@@ -1258,23 +1261,24 @@ void main() {
     });
   }
 
-  testWidgets('legacy and unsupported fields remain locked without correction', (
-    tester,
-  ) async {
-    final body = onboardingRequest(membership: true).toJson();
-    (body['membership'] as Map)['startDate'] = '2999-01-01';
-    final original = rejectedForCorrection(
-      request: OnboardingRequest.fromFrozenJson(jsonEncode(body)),
-    );
-    // A future start date cannot be edited by this wizard (only an existing
-    // member's past start can). Preserve it rather than replacing it.
-    save(original);
-    await mount(tester);
-    expect(find.text('Correct details and retry'), findsNothing);
-    expect(getForm(), findsNothing);
-    expect(storage.values[original.scope.storageKey], original.encode());
-    expect(repository.calls, isEmpty);
-  });
+  testWidgets(
+    'legacy and unsupported fields remain locked without correction',
+    (tester) async {
+      final body = onboardingRequest(membership: true).toJson();
+      (body['membership'] as Map)['startDate'] = '2999-01-01';
+      final original = rejectedForCorrection(
+        request: OnboardingRequest.fromFrozenJson(jsonEncode(body)),
+      );
+      // A future start date cannot be edited by this wizard (only an existing
+      // member's past start can). Preserve it rather than replacing it.
+      save(original);
+      await mount(tester);
+      expect(find.text('Correct details and retry'), findsNothing);
+      expect(getForm(), findsNothing);
+      expect(storage.values[original.scope.storageKey], original.encode());
+      expect(repository.calls, isEmpty);
+    },
+  );
 
   testWidgets(
     'scope change during correction verification preserves original with no POST',
@@ -1379,11 +1383,14 @@ void main() {
       );
       expect(find.text('Monthly'), findsOneWidget);
       await tap(tester, 'Back');
-      expect(tester.widget<TextFormField>(getForm()).initialValue, 'ME01');
       expect(
         tester
-            .widget<TextFormField>(find.byKey(const ValueKey('phone')))
+            .widget<TextFormField>(find.byKey(const ValueKey('firstName')))
             .initialValue,
+        'Alex',
+      );
+      expect(
+        tester.widget<TextFormField>(getForm()).initialValue,
         '9876543210',
       );
       expect(storage.values[original.scope.storageKey], original.encode());

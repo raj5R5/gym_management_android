@@ -1,6 +1,7 @@
 import 'package:gym_management_app/features/members/photos/member_photo_providers.dart';
 import 'photo_fakes.dart';
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:gym_management_app/features/memberships/providers/payment_providers.dart';
 import 'package:gym_management_app/features/memberships/data/pending_payment_store.dart';
@@ -136,7 +137,6 @@ void main() {
 
   Future<void> fillRequired(WidgetTester tester) async {
     for (final entry in {
-      'memberCode': 'ME02',
       'firstName': 'Alex',
       'lastName': 'River',
       'phone': '+91 9876543210',
@@ -691,14 +691,29 @@ void main() {
     await tester.pumpAndSettle();
     await openStandaloneCreate(tester);
     await fillRequired(tester);
-    repository.failure = const MemberFailure(
-      'That member code already exists in this gym. Choose another code.',
+    repository.failure = MemberFailure.fromDio(
+      DioException(
+        requestOptions: RequestOptions(),
+        response: Response(
+          requestOptions: RequestOptions(),
+          statusCode: 409,
+          data: {
+            'success': false,
+            'error': {
+              'code': 'DUPLICATE_MEMBER_PHONE',
+              'details': {'memberId': 'm1', 'name': 'Ravi Kumar'},
+            },
+          },
+        ),
+      ),
     );
     await reveal(tester, find.text('Create member'));
     await tester.tap(find.text('Create member'));
     await tester.pumpAndSettle();
     expect(
-      find.textContaining('That member code already exists'),
+      find.text(
+        'This phone number already belongs to Ravi Kumar. Each member needs their own number.',
+      ),
       findsOneWidget,
     );
     expect(find.text('Create member'), findsOneWidget);

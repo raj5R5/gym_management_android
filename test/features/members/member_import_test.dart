@@ -94,6 +94,17 @@ void main() {
       expect(payment.containsKey('reference'), isFalse);
     });
 
+    test('a sheet without a code column sends no code', () {
+      final row = check(
+        'Name,Phone,Plan,Start date\nRavi Kumar,9876543210,Monthly,2026-11-20\n',
+      ).single;
+      expect(row.problems, isEmpty);
+      expect(
+        (row.toRequest().toJson()['member'] as Map).containsKey('memberCode'),
+        isFalse,
+      );
+    });
+
     test('nothing paid sends no payment', () {
       final row = check(
         'Code,Name,Phone,Plan,Start date\nM1,Ravi Kumar,9876543210,Monthly,2026-11-20\n',
@@ -109,7 +120,7 @@ void main() {
         'Code,Name,Phone,Plan,Start date,Paid\n'
         'M1,Ravi,123,Gold,2027-01-01,99999\n'
         'M2,Asha,9876543211,Monthly,31/02/2026,\n'
-        'M2,Neha,9876543211,Monthly,2026-11-01,\n',
+        'M2,Neha,+91 98765 43211,Monthly,2026-11-01,\n',
       );
       expect(rows[0].problems, [
         contains('Phone'),
@@ -117,10 +128,8 @@ void main() {
         'Plan started is in the future',
       ]);
       expect(rows[1].problems.single, contains('use a date like'));
-      expect(rows[2].problems, [
-        'Same member code as row 3',
-        'Same phone as row 3',
-      ]);
+      // A repeated code is fine; the same phone written differently is not.
+      expect(rows[2].problems, ['Same phone as row 3']);
       expect(() => rows[0].toRequest(), throwsFormatException);
     });
 
@@ -138,7 +147,7 @@ void main() {
           isA<MemberSheetFailure>().having(
             (error) => error.message,
             'message',
-            contains('Member code, Plan, Plan started'),
+            contains('these column titles: Plan, Plan started'),
           ),
         ),
       );

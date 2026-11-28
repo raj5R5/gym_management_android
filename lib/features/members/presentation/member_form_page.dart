@@ -153,7 +153,6 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
     }
     FocusScope.of(context).unfocus();
     final draft = MemberDraft(
-      memberCode: _value('memberCode'),
       firstName: _value('firstName'),
       lastName: _value('lastName'),
       phone: _value('phone'),
@@ -262,13 +261,6 @@ class _MemberFormState extends ConsumerState<_MemberForm> {
                     child: Text(
                       'Member code: ${widget.member!.memberCode} (cannot be changed)',
                     ),
-                  )
-                else
-                  _field(
-                    'memberCode',
-                    'Member code',
-                    validator: validateMemberCode,
-                    maxLength: 32,
                   ),
                 _field(
                   'firstName',

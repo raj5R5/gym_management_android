@@ -189,7 +189,6 @@ void main() {
     String? reference,
   }) async {
     for (final entry in {
-      'memberCode': ' me_01 ',
       'firstName': 'Alex',
       'lastName': 'River',
       'phone': '9876543210',
@@ -325,8 +324,8 @@ void main() {
         expect(repository.calls, isEmpty);
         await tap(tester, 'Confirm registration');
         expect(repository.calls, hasLength(1));
+        // No code: the server numbers the member.
         expect(body()['member'], {
-          'memberCode': 'ME_01',
           'firstName': 'Alex',
           'lastName': 'River',
           'phone': '9876543210',
@@ -374,7 +373,7 @@ void main() {
         await tester.pumpAndSettle();
         await tap(tester, 'Done, add next member');
         expect(storage.values, isEmpty);
-        expect(find.byKey(const ValueKey('memberCode')), findsOneWidget);
+        expect(find.byKey(const ValueKey('firstName')), findsOneWidget);
         expect(repository.calls, hasLength(1));
       },
     );
@@ -439,7 +438,7 @@ void main() {
     storage.readGate = Completer<void>();
     await mount(tester, settle: false);
     expect(find.text('Confirm registration'), findsNothing);
-    expect(find.byKey(const ValueKey('memberCode')), findsNothing);
+    expect(find.byKey(const ValueKey('firstName')), findsNothing);
     storage.readGate!.complete();
     await tester.pumpAndSettle();
     expect(find.text('Retry saved registration'), findsOneWidget);

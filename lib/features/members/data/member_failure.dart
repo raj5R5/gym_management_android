@@ -14,6 +14,7 @@ class MemberFailure implements Exception {
         'Under-18 registration and profile uploads are unavailable until guardian authorization and verification are supported.',
       'DUPLICATE_MEMBER_CODE' =>
         'That member code already exists in this gym. Choose another code.',
+      'DUPLICATE_MEMBER_PHONE' => _duplicatePhone(data),
       'MEMBER_NOT_FOUND' => 'This member is no longer available in this gym.',
       'SUBSCRIPTION_NOT_FOUND' => 'This membership is no longer available.',
       'VALIDATION_ERROR' =>
@@ -23,6 +24,17 @@ class MemberFailure implements Exception {
   }
   @override
   String toString() => 'MemberFailure: $message';
+}
+
+/// Names the member who already has the phone, when the server says who.
+String _duplicatePhone(Object? data) {
+  final details = data is Map && data['error'] is Map
+      ? (data['error'] as Map)['details']
+      : null;
+  final name = details is Map ? details['name'] : null;
+  return name is String && name.trim().isNotEmpty
+      ? 'This phone number already belongs to ${name.trim()}. Each member needs their own number.'
+      : 'This phone number already belongs to a member of this gym. Each member needs their own number.';
 }
 
 const invalidMemberResponse = MemberFailure(

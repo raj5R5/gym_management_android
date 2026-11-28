@@ -6,7 +6,7 @@ export '../../../shared/validators/profile_validators.dart';
 /// Explicit allowlist: tenant and user linkage are never inputs.
 class MemberDraft {
   MemberDraft({
-    required this.memberCode,
+    this.memberCode = '',
     required this.firstName,
     required this.lastName,
     required this.phone,
@@ -32,7 +32,9 @@ class MemberDraft {
       throw const FormatException('Check the member information.');
     }
     return {
-      if (!editing) 'memberCode': memberCode.trim().toUpperCase(),
+      // Left out when empty: the server numbers the member (M0001, …).
+      if (!editing && memberCode.trim().isNotEmpty)
+        'memberCode': memberCode.trim().toUpperCase(),
       'firstName': firstName.trim(),
       'lastName': lastName.trim(),
       'phone': phone.trim(),
@@ -47,4 +49,13 @@ class MemberDraft {
   }
 }
 
-String? validateMemberCode(String? value) => validateProfileCode(value);
+/// Member codes are optional labels and may repeat; the phone identifies a member.
+String? validateMemberCode(String? value) =>
+    (value ?? '').trim().isEmpty ? null : validateProfileCode(value);
+
+/// The key that makes a member's phone unique in a gym: digits only, and the
+/// last 10 digits when longer. Mirrors the backend's member.phone.js.
+String memberPhoneKey(String phone) {
+  final digits = phone.replaceAll(RegExp(r'\D'), '');
+  return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+}

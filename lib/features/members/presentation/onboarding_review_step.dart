@@ -100,10 +100,11 @@ class OnboardingReviewStep extends StatelessWidget {
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    IconLabel(
-                      'Member code: ${member['memberCode']}',
-                      icon: Icons.badge_outlined,
-                    ),
+                    if (member['memberCode'] != null)
+                      IconLabel(
+                        'Member code: ${member['memberCode']}',
+                        icon: Icons.badge_outlined,
+                      ),
                     IconLabel(
                       'Phone: ${member['phone']}',
                       icon: Icons.phone_outlined,

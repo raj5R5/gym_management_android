@@ -34,7 +34,8 @@ void main() {
     });
   }
   for (final entry in {
-    'member code': member.copyWith(memberCode: ''),
+    // A code is optional, but a typed one must still be well formed.
+    'member code': member.copyWith(memberCode: 'x'),
     'first name': member.copyWith(firstName: ''),
     'last name': member.copyWith(lastName: ''),
     'phone': member.copyWith(phone: '123'),

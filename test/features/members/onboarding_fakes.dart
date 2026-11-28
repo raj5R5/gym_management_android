@@ -92,7 +92,11 @@ Map<String, dynamic> onboardingResultJson(
     'member': {
       'id': memberId,
       'gymId': gymId,
-      'memberCode': member['memberCode'].toString().trim().toUpperCase(),
+      // Like the server: a member sent without a code is numbered.
+      'memberCode': (member['memberCode'] ?? 'M0001')
+          .toString()
+          .trim()
+          .toUpperCase(),
       'firstName': member['firstName'].toString().trim(),
       'lastName': member['lastName'].toString().trim(),
       if (member['branchId'] != null) 'branchId': member['branchId'],

@@ -84,6 +84,11 @@ enum OnboardingBackendCode {
     409,
     OnboardingFailureKind.conflict,
   ),
+  duplicateMemberPhone(
+    'DUPLICATE_MEMBER_PHONE',
+    409,
+    OnboardingFailureKind.conflict,
+  ),
   duplicatePaymentReference(
     'DUPLICATE_PAYMENT_REFERENCE',
     409,
@@ -181,6 +186,8 @@ class OnboardingDiagnostics {
     'MEMBER_NOT_FOUND': 'Member not found.',
     'SUBSCRIPTION_NOT_FOUND': 'Subscription not found.',
     'DUPLICATE_MEMBER_CODE': 'Member code already exists in this gym.',
+    'DUPLICATE_MEMBER_PHONE':
+        'A member with this phone number already exists in this gym.',
     'DUPLICATE_PAYMENT_REFERENCE':
         'A successful payment with this reference already exists for this method in this gym.',
     'IDEMPOTENCY_KEY_CONFLICT':

@@ -124,7 +124,6 @@ void main() {
 
   Future<void> fill(WidgetTester tester) async {
     for (final entry in {
-      'memberCode': ' me_01 ',
       'firstName': 'Alex',
       'lastName': 'River',
       'phone': '9876543210',
@@ -376,7 +375,8 @@ void main() {
       expect(title(tester), 'Payment');
       await tap(tester, 'Continue');
       expect(title(tester), 'Review & Confirm');
-      expect(find.text('Member code: ME_01'), findsOneWidget);
+      // The server numbers the member; the wizard never asks for a code.
+      expect(find.textContaining('Member code'), findsNothing);
       await reveal(tester, find.text('Confirm registration'));
       expect(
         tester
@@ -413,7 +413,6 @@ void main() {
       expect(title(tester), 'Membership Plan');
       await tap(tester, 'Back');
       expect(title(tester), 'Member Details');
-      expect(value(tester, 'memberCode'), ' me_01 ');
       expect(value(tester, 'firstName'), 'Alex');
       expect(value(tester, 'lastName'), 'River');
       expect(value(tester, 'phone'), '9876543210');
@@ -426,10 +425,7 @@ void main() {
     await tap(tester, 'Continue');
     expect(title(tester), 'Member Details');
     expect(find.text('Enter 1–80 characters.'), findsNWidgets(2));
-    expect(
-      find.text('Use 2–32 letters, digits, underscores or hyphens.'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('memberCode')), findsNothing);
     expect(find.text('Enter a phone number with 7–15 digits.'), findsOneWidget);
     expect(result.members.writes, isEmpty);
   });
@@ -1073,7 +1069,6 @@ void main() {
       await tap(tester, 'Continue');
       await tap(tester, 'Edit member details');
       expect(title(tester), 'Member Details');
-      expect(value(tester, 'memberCode'), ' me_01 ');
       expect(value(tester, 'dateOfBirth'), 'Jan 2, 2000');
       await reveal(tester, find.byKey(const ValueKey('firstName')));
       await tester.enterText(

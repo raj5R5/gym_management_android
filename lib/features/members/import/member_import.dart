@@ -43,8 +43,8 @@ enum ImportColumn {
 
 /// The template a gym fills in: one header row and one example member.
 const memberImportTemplate =
-    'Member code,First name,Last name,Phone,Plan,Plan started,Paid,Method\n'
-    'M001,Ravi,Kumar,9876543210,Monthly,2026-11-01,1500,cash\n';
+    'First name,Last name,Phone,Plan,Plan started,Paid,Method\n'
+    'Ravi,Kumar,9876543210,Monthly,2026-11-01,1500,cash\n';
 
 class MemberSheetFailure implements Exception {
   const MemberSheetFailure(this.message);
@@ -237,7 +237,6 @@ List<ImportRow> checkImportRows(
       header.containsKey(ImportColumn.fullName) ||
       header.containsKey(ImportColumn.firstName);
   final missing = [
-    if (!header.containsKey(ImportColumn.memberCode)) 'Member code',
     if (!hasName) 'First name',
     if (!header.containsKey(ImportColumn.phone)) 'Phone',
     if (!header.containsKey(ImportColumn.plan)) 'Plan',
@@ -255,7 +254,7 @@ List<ImportRow> checkImportRows(
     for (final plan in plans)
       if (plan.status == 'active') plan.name.trim().toLowerCase(): plan,
   };
-  final codes = <String, int>{}, phones = <String, int>{};
+  final phones = <String, int>{};
   final result = <ImportRow>[];
   for (final (index, cells) in rows.skip(1).indexed) {
     String cell(ImportColumn column) {
@@ -280,18 +279,12 @@ List<ImportRow> checkImportRows(
     if (validateName(first) case final error?) problems.add('Name: $error');
     if (validatePhone(phone) case final error?) problems.add('Phone: $error');
     final line = index + 2;
-    if (code.isNotEmpty) {
-      if (codes[code.toLowerCase()] case final other?) {
-        problems.add('Same member code as row $other');
-      } else {
-        codes[code.toLowerCase()] = line;
-      }
-    }
+    // Codes may repeat; each member needs their own phone number.
     if (phone.isNotEmpty) {
-      if (phones[phone] case final other?) {
+      if (phones[memberPhoneKey(phone)] case final other?) {
         problems.add('Same phone as row $other');
       } else {
-        phones[phone] = line;
+        phones[memberPhoneKey(phone)] = line;
       }
     }
     final planName = cell(ImportColumn.plan);

@@ -145,9 +145,12 @@ class OnboardingRequest {
         'address',
         'emergencyContact',
       },
-      {'memberCode', 'firstName', 'lastName', 'phone'},
+      {'firstName', 'lastName', 'phone'},
     );
-    if (validateMemberCode(text(member, 'memberCode')) != null ||
+    if (member.containsKey('memberCode') &&
+            (member['memberCode'] is! String ||
+                text(member, 'memberCode').trim().isEmpty ||
+                validateMemberCode(text(member, 'memberCode')) != null) ||
         validateName(text(member, 'firstName')) != null ||
         validateName(text(member, 'lastName')) != null ||
         validatePhone(text(member, 'phone')) != null) {
@@ -428,7 +431,9 @@ class OnboardingResult {
         ? null
         : object(membership!['payment']);
     if (member.gymId.toLowerCase() != gymId.toLowerCase() ||
-        member.memberCode != text(input, 'memberCode').trim().toUpperCase() ||
+        input.containsKey('memberCode') &&
+            member.memberCode !=
+                text(input, 'memberCode').trim().toUpperCase() ||
         member.firstName != text(input, 'firstName').trim() ||
         member.lastName != text(input, 'lastName').trim() ||
         member.branchId?.toLowerCase() !=

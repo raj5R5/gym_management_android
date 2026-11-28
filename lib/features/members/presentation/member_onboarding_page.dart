@@ -259,14 +259,6 @@ class _OnboardingWizardState extends ConsumerState<_OnboardingWizard> {
         const Text('Start with their contact details. Gender is optional.'),
         const SizedBox(height: AppSpacing.xl),
         _field(
-          'memberCode',
-          'Member code',
-          _draft.memberCode,
-          (value) => _draft = _draft.copyWith(memberCode: value),
-          validator: validateMemberCode,
-          maximum: 32,
-        ),
-        _field(
           'firstName',
           'First name',
           _draft.firstName,

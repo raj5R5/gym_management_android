@@ -128,7 +128,7 @@ class _MemberImportPageState extends ConsumerState<MemberImportPage> {
       } on OnboardingFailure catch (failure) {
         error = switch (failure.diagnostics?.code) {
           'DUPLICATE_MEMBER_CODE' => 'Member code already exists',
-          'DUPLICATE_PHONE' => 'Phone already belongs to a member',
+          'DUPLICATE_MEMBER_PHONE' => 'Phone already belongs to a member',
           _ => failure.message,
         };
       } on Object {
@@ -201,7 +201,7 @@ class _MemberImportPageState extends ConsumerState<MemberImportPage> {
           ),
           const SizedBox(height: AppSpacing.sm),
           for (final (label, note) in const [
-            ('Member code', 'the code they use now'),
+            ('Member code', 'optional; left out, the app numbers them'),
             ('First name, Last name', 'or one Name column'),
             ('Phone', '10-digit mobile number'),
             ('Plan', 'the plan name, as in your Plans'),
@@ -376,7 +376,10 @@ class _RowTile extends StatelessWidget {
         color: row.ok ? null : AppPalette.accentLight,
       ),
       title: Text(
-        '${row.name.isEmpty ? 'Row ${row.line}' : row.name} · ${row.memberCode}',
+        [
+          row.name.isEmpty ? 'Row ${row.line}' : row.name,
+          if (row.memberCode.isNotEmpty) row.memberCode,
+        ].join(' · '),
       ),
       subtitle: Text(
         row.ok
