@@ -31,7 +31,7 @@ enum SignInRole {
   final IconData icon;
 }
 
-enum _Step { role, phone, code, ownerDetails, notLinked }
+enum _Step { role, phone, code, ownerDetails, yourName }
 
 /// The first screen: choose a role, then sign in or sign up with a phone code.
 class PhoneSignInPage extends ConsumerStatefulWidget {
@@ -149,7 +149,7 @@ class _PhoneSignInPageState extends ConsumerState<PhoneSignInPage> {
           _signupToken = signupToken;
           if (mounted) {
             _go(
-              _role == SignInRole.owner ? _Step.ownerDetails : _Step.notLinked,
+              _role == SignInRole.owner ? _Step.ownerDetails : _Step.yourName,
             );
           }
       }
@@ -178,14 +178,14 @@ class _PhoneSignInPageState extends ConsumerState<PhoneSignInPage> {
       _Step.phone => ('Your number.', 'We will text you a code to sign in.'),
       _Step.code => ('Enter the code.', 'Sent by SMS to +91 $_digits'),
       _Step.ownerDetails => ('Set up your gym.', 'Your number is verified.'),
-      _Step.notLinked => ('Not linked yet.', '+91 $_digits'),
+      _Step.yourName => ('Your name.', 'Your number is verified.'),
     };
     return PopScope(
       canPop: _step == _Step.role,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || _busy) return;
         _go(switch (_step) {
-          _Step.code || _Step.notLinked || _Step.ownerDetails => _Step.phone,
+          _Step.code || _Step.yourName || _Step.ownerDetails => _Step.phone,
           _ => _Step.role,
         });
       },
@@ -218,7 +218,7 @@ class _PhoneSignInPageState extends ConsumerState<PhoneSignInPage> {
                           _Step.phone => _phoneStep(),
                           _Step.code => _codeStep(),
                           _Step.ownerDetails => _ownerStep(),
-                          _Step.notLinked => _notLinkedStep(),
+                          _Step.yourName => _nameStep(),
                         },
                       ),
                     ),
@@ -454,30 +454,53 @@ class _PhoneSignInPageState extends ConsumerState<PhoneSignInPage> {
     ),
   );
 
-  Widget _notLinkedStep() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        _role == SignInRole.member
-            ? 'This number is not linked to a gym yet. Ask your gym to add you '
-                  'as a member with this number, then sign in again.'
-            : 'This number is not linked to a gym yet. Ask the gym owner to add '
-                  'you as a trainer with this number, then sign in again.',
-      ),
-      const SizedBox(height: AppSpacing.sm),
-      Text(
-        'Sending a request to join a gym from the app is coming next.',
-        style: AppType.body.copyWith(color: AppColors.textMuted),
-      ),
-      const SizedBox(height: AppSpacing.xl),
-      OutlinedButton(
-        onPressed: () => _go(_Step.phone),
-        child: const Text('Use a different number'),
-      ),
-      TextButton(
-        onPressed: () => context.go(AppRoutes.activate),
-        child: const Text('I have a code from my gym'),
-      ),
-    ],
+  final _nameForm = GlobalKey<FormState>();
+
+  Future<void> _createAccount() async {
+    if (!_nameForm.currentState!.validate()) return;
+    await _run(() async {
+      final response = await ref
+          .read(phoneAuthRepositoryProvider)
+          .registerAccount(signupToken: _signupToken!, displayName: _name.text);
+      await ref.read(sessionControllerProvider.notifier).adoptSignIn(response);
+    });
+  }
+
+  Widget _nameStep() => Form(
+    key: _nameForm,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          _role == SignInRole.member
+              ? 'If your gym already added this number, you will see your plan '
+                    'straight away. If not, you can ask your gym to let you join.'
+              : 'If the gym already added you as a trainer with this number, you '
+                    'are in straight away. If not, you can ask the gym to let you join.',
+        ),
+        const SizedBox(height: AppSpacing.md),
+        TextFormField(
+          key: const ValueKey('your-name'),
+          controller: _name,
+          enabled: !_busy,
+          textCapitalization: TextCapitalization.words,
+          autofillHints: const [AutofillHints.name],
+          decoration: const InputDecoration(
+            labelText: 'Your full name',
+            prefixIcon: Icon(Icons.person_outline),
+          ),
+          validator: (value) {
+            final text = value?.trim() ?? '';
+            return text.isEmpty || text.length > 120
+                ? 'Enter your name.'
+                : null;
+          },
+          onFieldSubmitted: (_) => _createAccount(),
+        ),
+        _errorText(),
+        const SizedBox(height: AppSpacing.xl),
+        _primary('Continue', _createAccount, busyLabel: 'Setting up…'),
+      ],
+    ),
   );
 }

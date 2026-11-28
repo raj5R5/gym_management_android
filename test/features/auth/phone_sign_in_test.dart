@@ -40,6 +40,18 @@ class _Phone extends PhoneAuthRepository {
   }
 
   @override
+  Future<LoginResponse> registerAccount({
+    required String signupToken,
+    required String displayName,
+  }) async {
+    calls.add('account:$signupToken:$displayName');
+    return LoginResponse(
+      identity: syntheticIdentity(),
+      tokens: syntheticTokens(),
+    );
+  }
+
+  @override
   Future<LoginResponse> registerOwner({
     required String signupToken,
     required String ownerFullName,
@@ -279,17 +291,26 @@ void main() {
     expect(session.adopted, hasLength(1));
   });
 
-  testWidgets('a new member number is told to ask the gym', (tester) async {
+  testWidgets('a new member number gives a name and gets an account', (
+    tester,
+  ) async {
     final (phone, session) = await pump(tester);
     phone.result = const PhoneNewAccount(
       signupToken: 'ticket',
       phone: '+919876543210',
     );
     await throughCode(tester, SignInRole.member);
-    expect(find.text('Not linked yet.'), findsOneWidget);
-    expect(find.textContaining('Ask your gym to add you'), findsOneWidget);
+    expect(find.text('Your name.'), findsOneWidget);
+    await tap(tester, find.text('Continue'));
+    expect(find.text('Enter your name.'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('your-name')),
+      'Asha Verma',
+    );
+    await tap(tester, find.text('Continue'));
+    expect(phone.calls.last, 'account:ticket:Asha Verma');
     expect(phone.calls.where((call) => call.startsWith('owner:')), isEmpty);
-    expect(session.adopted, isEmpty);
+    expect(session.adopted, hasLength(1));
   });
 
   testWidgets('a bad number is caught before any SMS, and send errors show', (

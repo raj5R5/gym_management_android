@@ -22,6 +22,7 @@ import '../models/onboarding_correction.dart';
 import '../../memberships/data/billing_failure.dart';
 import '../../memberships/providers/plan_providers.dart';
 import '../providers/member_providers.dart';
+import 'member_phone_check.dart';
 import '../providers/onboarding_providers.dart';
 
 /// Presentation only. The existing service owns storage, exact replay and scope
@@ -606,6 +607,26 @@ class _RecoveryGateState extends ConsumerState<OnboardingRecoveryGate> {
                           const Text('No initial payment was recorded.'),
                         const SizedBox(height: AppSpacing.lg),
                         const Text('Saved. Tap Done to add the next member.'),
+                        const SizedBox(height: AppSpacing.sm),
+                        // Optional: the member reads back an SMS code now, or later from their page.
+                        OutlinedButton.icon(
+                          key: const ValueKey('verify-phone-now'),
+                          onPressed: () => verifyMemberPhone(
+                            context,
+                            ref,
+                            (
+                              userId: widget.scope.userId,
+                              gymId: widget.scope.gymId,
+                              memberId: result.member.id,
+                            ),
+                            phone:
+                                operation!.request.toJson()['member']['phone']
+                                    as String,
+                            firstName: result.member.firstName,
+                          ),
+                          icon: const Icon(Icons.sms_outlined),
+                          label: const Text('Verify phone now'),
+                        ),
                         TextButton(
                           onPressed: () async {
                             if (!_current || _busy) return;

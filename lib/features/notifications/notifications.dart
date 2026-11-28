@@ -14,7 +14,8 @@ enum NotificationKind {
   claim('claim', 'UPI reports'),
   followup('followup', 'Enquiry follow-ups'),
   birthday('birthday', 'Birthdays'),
-  inactive('inactive', 'Not visiting');
+  inactive('inactive', 'Not visiting'),
+  join('join', 'Join requests');
 
   const NotificationKind(this.wire, this.label);
   final String wire, label;
@@ -29,7 +30,7 @@ enum NotificationKind {
   /// Kinds that are reminders a member can be sent on WhatsApp.
   bool get remindable => switch (this) {
     expiring || expired || dues || birthday || inactive || followup => true,
-    claim => false,
+    claim || join => false,
   };
 }
 
@@ -107,7 +108,7 @@ class GymNotification {
         'Hi $name, thanks for asking about the gym. '
             'Would you like to come in for a free trial this week?'
             '${gymName.isEmpty ? '' : '\n– $gymName'}',
-      NotificationKind.claim => '',
+      NotificationKind.claim || NotificationKind.join => '',
     };
   }
 }

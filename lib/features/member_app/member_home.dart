@@ -213,19 +213,37 @@ final memberHomeRepositoryProvider = Provider<MemberHomeRepository>(
   (ref) => MemberHomeRepository(ref.watch(authenticatedApiClientProvider)),
 );
 
-/// The gym of the signed-in member's first active member grant.
-final memberGymIdProvider = Provider<String?>((ref) {
+/// The gyms the signed-in person is an active member of.
+final memberGymsProvider = Provider<List<AuthGymAccess>>((ref) {
   final session = ref.watch(sessionControllerProvider);
   if (session is! SessionAuthenticated ||
       session.identity.user.status != AccountStatus.active) {
-    return null;
+    return const [];
   }
-  for (final grant in session.identity.gymAccess) {
-    if (grant.role == AuthRole.member && grant.status == AccountStatus.active) {
-      return grant.gymId;
-    }
-  }
-  return null;
+  return [
+    for (final grant in session.identity.gymAccess)
+      if (grant.role == AuthRole.member && grant.status == AccountStatus.active)
+        grant,
+  ];
+});
+
+/// The gym a member of several gyms picked; null means the first one.
+class MemberGymChoice extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void choose(String gymId) => state = gymId;
+}
+
+final memberGymChoiceProvider = NotifierProvider<MemberGymChoice, String?>(
+  MemberGymChoice.new,
+);
+
+/// The member gym being shown: the one picked, else the first.
+final memberGymIdProvider = Provider<String?>((ref) {
+  final gyms = ref.watch(memberGymsProvider);
+  if (gyms.isEmpty) return null;
+  final chosen = ref.watch(memberGymChoiceProvider);
+  return gyms.any((grant) => grant.gymId == chosen) ? chosen : gyms.first.gymId;
 });
 
 final memberHomeProvider = FutureProvider.autoDispose<MemberHome?>((ref) {

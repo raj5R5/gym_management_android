@@ -36,6 +36,7 @@ import '../../features/auth/models/auth_models.dart';
 import '../../features/auth/models/session_state.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/phone_sign_in_page.dart';
+import '../../features/gym_join/join_requests_page.dart';
 import '../../features/auth/presentation/owner_signup_page.dart';
 import '../../features/auth/presentation/password_recovery_page.dart';
 import '../../features/account_privacy/privacy_support_page.dart';
@@ -384,6 +385,10 @@ GoRouter createAppRouter({
               GoRoute(
                 path: 'security',
                 builder: (_, _) => const AccountSecurityPage(),
+              ),
+              GoRoute(
+                path: 'join-requests',
+                builder: (_, _) => const JoinRequestsPage(),
               ),
             ],
           ),

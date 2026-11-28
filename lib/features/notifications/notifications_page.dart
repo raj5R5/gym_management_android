@@ -177,6 +177,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                               context.push(AppRoutes.paymentClaims),
                           child: const Text('Review'),
                         )
+                      : kind == NotificationKind.join
+                      ? TextButton(
+                          onPressed: () => context.push(AppRoutes.joinRequests),
+                          child: const Text('Review'),
+                        )
                       : null,
                   children: [
                     SeparatedRows(
@@ -206,6 +211,8 @@ class _NotificationTile extends ConsumerWidget {
     switch (item.kind) {
       case NotificationKind.claim:
         context.push(AppRoutes.paymentClaims);
+      case NotificationKind.join:
+        context.push(AppRoutes.joinRequests);
       case NotificationKind.followup:
         if (item.lead case final lead?) {
           context.push('${AppRoutes.leads}/${lead.id}');
@@ -237,6 +244,7 @@ class _NotificationTile extends ConsumerWidget {
           NotificationKind.followup => Icons.contact_phone_outlined,
           NotificationKind.birthday => Icons.cake_outlined,
           NotificationKind.inactive => Icons.directions_walk,
+          NotificationKind.join => Icons.group_add_outlined,
         }, color: color),
       ),
       title: Text(

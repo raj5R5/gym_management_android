@@ -103,6 +103,7 @@ class MemberHomePage extends ConsumerWidget {
                             '${home.gymName} · ${home.memberCode}',
                             style: theme.textTheme.bodySmall,
                           ),
+                        const _GymSwitcher(),
                       ],
                     ),
                   ),
@@ -654,4 +655,42 @@ class _ReportUpiDialogState extends ConsumerState<ReportUpiDialog> {
       ),
     ],
   );
+}
+
+/// For a member of more than one gym: switch which gym the home shows.
+class _GymSwitcher extends ConsumerWidget {
+  const _GymSwitcher();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gyms = ref.watch(memberGymsProvider);
+    if (gyms.length < 2) return const SizedBox.shrink();
+    final current = ref.watch(memberGymIdProvider);
+    return PopupMenuButton<String>(
+      key: const ValueKey('member-gym-switcher'),
+      tooltip: 'Switch gym',
+      onSelected: (gymId) =>
+          ref.read(memberGymChoiceProvider.notifier).choose(gymId),
+      itemBuilder: (_) => [
+        for (final grant in gyms)
+          CheckedPopupMenuItem(
+            value: grant.gymId,
+            checked: grant.gymId == current,
+            child: Text(grant.gymName ?? 'Gym'),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Switch gym (${gyms.length})',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const Icon(Icons.arrow_drop_down),
+          ],
+        ),
+      ),
+    );
+  }
 }

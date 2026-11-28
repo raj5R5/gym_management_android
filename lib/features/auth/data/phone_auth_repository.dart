@@ -161,6 +161,26 @@ class PhoneAuthRepository {
     }
   }
 
+  /// A member or trainer account for a verified new number. The server links
+  /// any gym records made for the number; with none, they can ask to join.
+  Future<LoginResponse> registerAccount({
+    required String signupToken,
+    required String displayName,
+  }) async {
+    final data = await _post('auth/phone/register-account', {
+      'signupToken': signupToken,
+      'displayName': displayName.trim(),
+      'client': 'mobile',
+    });
+    try {
+      return LoginResponse.fromJson(data);
+    } on FormatException {
+      throw const PhoneAuthFailure(
+        'The server returned an unexpected response.',
+      );
+    }
+  }
+
   /// Creates the owner account and gym for a verified new number.
   Future<LoginResponse> registerOwner({
     required String signupToken,

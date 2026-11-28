@@ -256,6 +256,7 @@ void main() {
       await tester.pumpWidget(
         _app(const MemberHomePage(), [
           memberGymIdProvider.overrideWithValue(gymId),
+          memberGymsProvider.overrideWithValue(const []),
           memberHomeRepositoryProvider.overrideWithValue(_FakeHome(homeJson())),
         ]),
       );
@@ -280,6 +281,7 @@ void main() {
     await tester.pumpWidget(
       _app(const MemberHomePage(), [
         memberGymIdProvider.overrideWithValue(gymId),
+        memberGymsProvider.overrideWithValue(const []),
         memberHomeRepositoryProvider.overrideWithValue(
           _FakeHome(homeJson(membership: null, balance: 0)),
         ),
@@ -370,6 +372,7 @@ void main() {
     await tester.pumpWidget(
       _app(const MemberHomePage(), [
         memberGymIdProvider.overrideWithValue(gymId),
+        memberGymsProvider.overrideWithValue(const []),
         memberHomeRepositoryProvider.overrideWithValue(repository),
       ]),
     );
@@ -439,6 +442,7 @@ void main() {
     await tester.pumpWidget(
       _app(const MemberHomePage(), [
         memberGymIdProvider.overrideWithValue(gymId),
+        memberGymsProvider.overrideWithValue(const []),
         memberHomeRepositoryProvider.overrideWithValue(repository),
       ]),
     );

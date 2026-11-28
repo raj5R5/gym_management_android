@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../gym_join/join_gym_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/navigation/foundation_screens.dart';
@@ -28,6 +29,13 @@ class RoleHome extends ConsumerWidget {
     }
     if (ref.watch(ptGymIdProvider) != null) return const TrainerHomePage();
     if (ref.watch(memberGymIdProvider) != null) return const MemberHomePage();
+    // Signed in with a verified phone but in no gym yet: ask one to join.
+    final session = ref.watch(sessionControllerProvider);
+    if (session is SessionAuthenticated &&
+        session.identity.user.phoneVerified &&
+        session.identity.gymAccess.isEmpty) {
+      return const JoinGymPage();
+    }
     return const AuthenticatedHomeScreen();
   }
 }

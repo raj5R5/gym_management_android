@@ -11,6 +11,7 @@ import '../../../shared/widgets/soft_panel.dart';
 import '../../memberships/models/billing_models.dart';
 import '../../memberships/presentation/plan_duration_summary.dart';
 import '../models/member_models.dart';
+import 'member_phone_check.dart';
 import '../providers/member_providers.dart';
 import 'member_components.dart';
 import 'member_list_widgets.dart';
@@ -74,6 +75,7 @@ class MemberProfileCard extends ConsumerWidget {
                             style: theme.textTheme.bodySmall,
                           ),
                           MemberStatusBadge(status: member.status),
+                          MemberPhoneCheck(scope: scope, member: member),
                         ],
                       ),
                     ),

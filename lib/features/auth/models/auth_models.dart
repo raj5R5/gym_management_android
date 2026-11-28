@@ -81,17 +81,22 @@ class AuthGymAccess {
     required this.gymId,
     required this.role,
     required this.status,
+    this.gymName,
   });
 
   factory AuthGymAccess.fromJson(Map<String, dynamic> json) => AuthGymAccess(
     id: _string(json, 'id'),
     gymId: _string(json, 'gymId'),
+    gymName: json['gymName'] is String ? json['gymName'] as String : null,
     role: AuthRole.values.byName(_string(json, 'role')),
     status: AccountStatus.values.byName(_string(json, 'status')),
   );
 
   final String id;
   final String gymId;
+
+  /// Shown when a person belongs to more than one gym.
+  final String? gymName;
   final AuthRole role;
   final AccountStatus status;
 }

@@ -36,6 +36,7 @@ class MemberProfile {
       firstName = text(json, 'firstName'),
       lastName = text(json, 'lastName'),
       phone = text(json, 'phone'),
+      phoneVerified = json['phoneVerified'] == true,
       status = MemberStatus.values.byName(text(json, 'status')),
       gender = optionalText(json, 'gender'),
       photoUrl = optionalText(json, 'photoUrl'),
@@ -51,6 +52,9 @@ class MemberProfile {
         EmergencyContact.fromJson,
       );
   final String id, memberCode, firstName, lastName, phone;
+
+  /// The member read back an SMS code sent to [phone].
+  final bool phoneVerified;
   // Member 360 deliberately excludes gymId and userId. Scope belongs to the request.
   final String? gymId, gender, photoUrl;
   final int photoRevision;

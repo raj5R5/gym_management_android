@@ -220,6 +220,11 @@ class _OwnerAccountPage extends ConsumerWidget {
                       'Import members',
                       AppRoutes.memberImport,
                     ),
+                    row(
+                      Icons.group_add_outlined,
+                      'Gym code & join requests',
+                      AppRoutes.joinRequests,
+                    ),
                   ],
                 ),
               ],
