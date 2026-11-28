@@ -297,7 +297,8 @@ class OnboardingFailure implements Exception {
         AuthFailureKind.invalidSession ||
         AuthFailureKind.forbidden => OnboardingFailureKind.authorization,
         AuthFailureKind.validation => OnboardingFailureKind.validation,
-        AuthFailureKind.rateLimited => OnboardingFailureKind.rateLimited,
+        AuthFailureKind.rateLimited ||
+        AuthFailureKind.locked => OnboardingFailureKind.rateLimited,
         AuthFailureKind.network => OnboardingFailureKind.network,
         AuthFailureKind.server => OnboardingFailureKind.server,
         AuthFailureKind.unexpectedResponse =>

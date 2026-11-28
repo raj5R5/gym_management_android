@@ -231,6 +231,11 @@ class _OwnerAccountPage extends ConsumerWidget {
                   indent: 40,
                   children: [
                     row(
+                      Icons.shield_outlined,
+                      'Sign-in & security',
+                      AppRoutes.accountSecurity,
+                    ),
+                    row(
                       Icons.policy_outlined,
                       'Privacy & support',
                       AppRoutes.privacySupport,

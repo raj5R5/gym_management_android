@@ -23,6 +23,7 @@ class AuthUser {
     required this.email,
     required this.status,
     this.displayName,
+    this.emailVerified = false,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -35,6 +36,7 @@ class AuthUser {
       email: _string(json, 'email'),
       displayName: displayName as String?,
       status: AccountStatus.values.byName(_string(json, 'status')),
+      emailVerified: json['emailVerified'] == true,
     );
   }
 
@@ -42,6 +44,9 @@ class AuthUser {
   final String email;
   final String? displayName;
   final AccountStatus status;
+
+  /// The owner entered the code emailed to this address.
+  final bool emailVerified;
 }
 
 /// Identity metadata returned by auth, not a gym feature or a client permission.

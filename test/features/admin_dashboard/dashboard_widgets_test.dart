@@ -344,7 +344,7 @@ void main() {
       await tester.pumpAndSettle();
       // A brand-new gym gets a setup checklist instead of a zero-state panel.
       await reveal(tester, find.text('Finish setting up'));
-      expect(find.text('2 of 5 done'), findsOneWidget);
+      expect(find.text('3 of 6 done'), findsOneWidget);
       expect(find.text('Create a membership plan'), findsOneWidget);
       expect(find.text('Add your first member'), findsOneWidget);
       await scrollToTop(tester);

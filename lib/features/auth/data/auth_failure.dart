@@ -8,6 +8,7 @@ enum AuthFailureKind {
   unexpectedResponse,
   validation,
   rateLimited,
+  locked,
   forbidden,
   storage,
   configuration,
@@ -37,6 +38,8 @@ class AuthFailure implements Exception {
       'The server returned an unexpected response.',
     AuthFailureKind.validation => 'Check the supplied information.',
     AuthFailureKind.rateLimited => 'Too many requests. Try again later.',
+    AuthFailureKind.locked =>
+      'Too many wrong passwords. Wait 15 minutes, or use Recover access.',
     AuthFailureKind.forbidden => 'This action is not permitted.',
     AuthFailureKind.storage =>
       'Authentication credentials could not be securely stored or cleared.',
@@ -68,6 +71,9 @@ class AuthFailure implements Exception {
     final status = error.response?.statusCode;
     if (status == 400) return failure(AuthFailureKind.validation);
     if (status == 403) return failure(AuthFailureKind.forbidden);
+    if (status == 429 && code == 'ACCOUNT_TEMPORARILY_LOCKED') {
+      return failure(AuthFailureKind.locked);
+    }
     if (status == 429) return failure(AuthFailureKind.rateLimited);
     if (status != null && status >= 500) {
       return failure(AuthFailureKind.server);

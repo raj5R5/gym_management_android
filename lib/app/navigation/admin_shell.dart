@@ -54,6 +54,7 @@ class AdminShell extends ConsumerWidget {
     final profileDetail =
         location == AppRoutes.ownerProfile ||
         location == AppRoutes.gymSettings ||
+        location == AppRoutes.accountSecurity ||
         location.startsWith(AppRoutes.checkIn) ||
         location == AppRoutes.expenses ||
         location.startsWith(AppRoutes.leads) ||

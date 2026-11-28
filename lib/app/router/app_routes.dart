@@ -17,6 +17,7 @@ abstract final class AppRoutes {
   static const more = '/home/more';
   static const ownerProfile = '/home/more/profile';
   static const gymSettings = '/home/more/settings';
+  static const accountSecurity = '/home/more/security';
   static const checkIn = '/home/check-in';
   static const expenses = '/home/expenses';
   static const leads = '/home/leads';

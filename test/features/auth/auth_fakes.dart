@@ -26,6 +26,8 @@ AuthIdentity syntheticIdentity() => AuthIdentity(
     id: 'test-account',
     email: 'person@example.invalid',
     status: AccountStatus.active,
+    // Most tests are about other things; email verification has its own tests.
+    emailVerified: true,
   ),
   gymAccess: [],
 );
@@ -35,6 +37,7 @@ Map<String, dynamic> identityJson() => {
     'id': 'test-account',
     'email': 'person@example.invalid',
     'status': 'active',
+    'emailVerified': true,
   },
   'gymAccess': <Object>[],
 };

@@ -19,6 +19,8 @@ import '../../owner_profile/owner_profile.dart';
 import '../models/dashboard_models.dart';
 import '../providers/dashboard_providers.dart';
 import '../../../shared/widgets/page_section.dart';
+import '../../auth/models/session_state.dart';
+import '../../auth/providers/session_controller.dart';
 
 const _weekdays = [
   'Monday',
@@ -115,6 +117,7 @@ List<SetupStep> setupSteps({
   required GymSettings? settings,
   required int? planCount,
   required GymDashboard? dashboard,
+  bool emailVerified = true,
 }) => [
   SetupStep(
     'Set your gym’s timezone',
@@ -147,6 +150,12 @@ List<SetupStep> setupSteps({
     ),
   ),
   SetupStep(
+    'Verify your email',
+    emailVerified,
+    'Verify',
+    () => context.push(AppRoutes.accountSecurity),
+  ),
+  SetupStep(
     'Add your GST number and address',
     settings == null || (settings.gstin != null && settings.address != null),
     'Add',
@@ -172,6 +181,10 @@ class SetupChecklist extends ConsumerWidget {
       settings: settings,
       planCount: plans,
       dashboard: dashboard,
+      emailVerified: switch (ref.watch(sessionControllerProvider)) {
+        SessionAuthenticated(:final identity) => identity.user.emailVerified,
+        _ => true,
+      },
     );
     final done = steps.where((step) => step.done).length;
     if (done == steps.length) return const SizedBox.shrink();

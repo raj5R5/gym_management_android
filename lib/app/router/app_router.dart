@@ -48,6 +48,7 @@ import '../navigation/foundation_screens.dart';
 import 'app_routes.dart';
 import '../../features/members/import/member_import_page.dart';
 import '../../features/notifications/notifications_page.dart';
+import '../../features/account_security/account_security_page.dart';
 
 /// Where [path] should go for [current]; null keeps it. Pure, for testing.
 String? appRedirect(SessionState current, String path) {
@@ -371,6 +372,10 @@ GoRouter createAppRouter({
               GoRoute(
                 path: 'settings',
                 builder: (_, _) => const GymSettingsPage(),
+              ),
+              GoRoute(
+                path: 'security',
+                builder: (_, _) => const AccountSecurityPage(),
               ),
             ],
           ),
