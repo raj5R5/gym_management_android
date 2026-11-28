@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/trainer_failure.dart';
+import '../../auth/models/owner_registration.dart';
 import '../models/trainer_models.dart';
 import '../../../shared/widgets/page_section.dart';
 
@@ -180,8 +181,7 @@ class _GrantDialogState extends ConsumerState<_GrantDialog> {
               autofillHints: const [AutofillHints.newPassword],
               decoration: InputDecoration(
                 labelText: 'Temporary password',
-                helperText:
-                    '15+ characters, not a common phrase. Share it privately.',
+                helperText: 'Share it privately.',
                 suffixIcon: IconButton(
                   tooltip: _hidden ? 'Show password' : 'Hide password',
                   onPressed: () => setState(() => _hidden = !_hidden),
@@ -192,9 +192,7 @@ class _GrantDialogState extends ConsumerState<_GrantDialog> {
                   ),
                 ),
               ),
-              validator: (value) => (value ?? '').length < 15
-                  ? 'Use at least 15 characters'
-                  : null,
+              validator: ownerPasswordError,
             ),
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.sm),

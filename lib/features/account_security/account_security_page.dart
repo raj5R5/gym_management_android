@@ -284,10 +284,7 @@ class _ChangePasswordState extends ConsumerState<_ChangePassword> {
             controller: _next,
             obscureText: _hidden,
             autofillHints: const [AutofillHints.newPassword],
-            decoration: field(
-              'New password',
-              helper: 'Use 15–128 characters. Avoid common passwords.',
-            ),
+            decoration: field('New password'),
             validator: ownerPasswordError,
           ),
           const SizedBox(height: AppSpacing.md),

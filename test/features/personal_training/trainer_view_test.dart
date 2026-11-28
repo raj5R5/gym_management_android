@@ -118,11 +118,11 @@ void main() {
       );
       await tester.enterText(
         find.byKey(const ValueKey('trainer-access-password')),
-        'short',
+        '',
       );
       await tester.tap(find.text('Give access'));
       await tester.pumpAndSettle();
-      expect(find.text('Use at least 15 characters'), findsOneWidget);
+      expect(find.text('Enter a password.'), findsOneWidget);
       expect(access.calls, isEmpty);
       await tester.enterText(
         find.byKey(const ValueKey('trainer-access-password')),

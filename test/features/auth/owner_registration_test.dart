@@ -29,28 +29,13 @@ void main() {
     },
   );
   test(
-    'client password policy matches backend lengths, blocklist, common-prefix and repeated-pattern rules',
+    'client password policy only requires 1–128 characters, like the backend',
     () {
-      for (final invalid in [
-        '',
-        'short',
-        'x' * 129,
-        ' ' * 20,
-        'abcd' * 8,
-        'correcthorsebatterystaple',
-        'Correct Horse Battery Staple',
-        'password1234567890',
-        'P@ssw0rd!12345678',
-        'qwerty1234567890',
-      ]) {
-        expect(ownerPasswordError(invalid), isNotNull);
-      }
-      for (final valid in [
-        syntheticCredential(),
-        'River violet moon oak 47!',
-        'abcdeFGHIJKLMN9',
-        'a long sentence with a new line\nfinishes here',
-      ]) {
+      expect(ownerPasswordError(''), 'Enter a password.');
+      expect(ownerPasswordError(null), 'Enter a password.');
+      expect(ownerPasswordError('x' * 129), 'Use at most 128 characters.');
+      // No strength rules: short and common passwords are the owner's choice.
+      for (final valid in ['1', '1234', 'password', 'abcabc', ' ', 'x' * 128]) {
         expect(ownerPasswordError(valid), isNull);
       }
     },

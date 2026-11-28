@@ -181,8 +181,6 @@ class _PasswordRecoveryPageState extends ConsumerState<PasswordRecoveryPage> {
                       validator: ownerPasswordError,
                       decoration: InputDecoration(
                         labelText: 'New password',
-                        helperText:
-                            'Use 15–128 characters; avoid common or repeated patterns.',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           tooltip: _hidePassword

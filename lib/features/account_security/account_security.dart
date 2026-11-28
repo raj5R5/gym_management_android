@@ -46,8 +46,7 @@ class AccountSecurityRepository {
         'CURRENT_PASSWORD_INCORRECT' => 'Your current password is not correct.',
         'PASSWORD_UNCHANGED' =>
           'Choose a password different from your current one.',
-        'VALIDATION_ERROR' =>
-          'Use 15–128 characters and avoid common passwords.',
+        'VALIDATION_ERROR' => 'Use a password of 1–128 characters.',
         'INVALID_VERIFICATION_CODE' =>
           'That code is not correct or has expired. Send a new code.',
         'EMAIL_ALREADY_VERIFIED' => 'Your email is already verified.',

@@ -18,34 +18,11 @@ String? ownerEmailError(String? value) {
 }
 
 // Mirrors src/modules/auth/auth.validation.js. The backend remains authoritative.
+// No strength rules by the owner's choice: any 1–128 characters.
 String? ownerPasswordError(String? value) {
   final password = value ?? '';
-  if (password.length < 15 || password.length > 128) {
-    return 'Use a password with 15–128 characters.';
-  }
-  final comparison = password.toLowerCase().replaceAll(
-    RegExp(r'[^a-z0-9]'),
-    '',
-  );
-  const common = {
-    'correcthorsebatterystaple',
-    'thisisapassword',
-    'iloveyou',
-    'changeme',
-    'letmein',
-    'welcome',
-    'admin',
-    'gymmanagement',
-  };
-  if (password.trim().isEmpty ||
-      RegExp(r'^(.{1,8})\1+$', unicode: true).hasMatch(password) ||
-      common.contains(comparison) ||
-      RegExp(
-        r'^(?:p[a@]ssw[o0]rd|qwerty|letmein|welcome|changeme|administrator|1234567890|abcdefghijklmnopqrstuvwxyz)[0-9!@#$%^&*._-]*$',
-        caseSensitive: false,
-      ).hasMatch(password.trim())) {
-    return 'Choose a less predictable password; avoid common or repeated patterns.';
-  }
+  if (password.isEmpty) return 'Enter a password.';
+  if (password.length > 128) return 'Use at most 128 characters.';
   return null;
 }
 

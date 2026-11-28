@@ -354,8 +354,6 @@ class _OwnerSignupPageState extends ConsumerState<OwnerSignupPage> {
                               toggle: () => setState(
                                 () => _hidePassword = !_hidePassword,
                               ),
-                              helper:
-                                  'Use 15–128 characters. Avoid common passwords and short repeated patterns.',
                               autofill: const [AutofillHints.newPassword],
                             ),
                             _field(

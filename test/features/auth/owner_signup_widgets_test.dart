@@ -191,10 +191,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Enter a valid email address.'), findsOneWidget);
-      expect(
-        find.text('Use a password with 15–128 characters.'),
-        findsOneWidget,
-      );
+      expect(find.text('Enter a password.'), findsOneWidget);
       expect(find.text('Confirm your password.'), findsOneWidget);
       expect(
         find.text('Enter a gym name with 2–120 characters.'),
@@ -204,7 +201,7 @@ void main() {
     },
   );
   testWidgets(
-    'email, weak password and mismatched confirmation fail at their fields',
+    'email and mismatched confirmation fail at their fields; a simple password is fine',
     (tester) async {
       final repository = FakeRegistration();
       await pump(tester, repository);
@@ -214,12 +211,7 @@ void main() {
       await submit(tester);
       await tester.pumpAndSettle();
       expect(find.text('Enter a valid email address.'), findsOneWidget);
-      expect(
-        find.text(
-          'Choose a less predictable password; avoid common or repeated patterns.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Enter a password.'), findsNothing);
       expect(find.text('Passwords must match.'), findsOneWidget);
       expect(repository.calls, 0);
     },

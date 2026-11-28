@@ -208,8 +208,6 @@ class _ActivationPageState extends ConsumerState<ActivationPage> {
                       validator: ownerPasswordError,
                       decoration: InputDecoration(
                         labelText: 'Choose a password',
-                        helperText:
-                            '15+ characters. A short phrase works well.',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           tooltip: _hide ? 'Show password' : 'Hide password',
